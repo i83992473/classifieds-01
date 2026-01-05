@@ -1,0 +1,93 @@
+type Ad @model @auth(rules: [
+  { allow: owner },
+  { allow: groups, groups: ["admin"], operations: [read, update, delete] }
+]) {
+  id: ID!
+  title: String!
+  content: String
+  blocks: AWSJSON
+  widthInches: Float
+  status: AdStatus
+  approved: Boolean
+  approvedAt: AWSDateTime
+  approvedBy: String
+  productName: String
+  totalPrice: Float
+  imageKeys: [String]
+  pdfKey: String
+  owner: String
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+enum AdStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  NOT_APPROVED
+  ARCHIVED
+  PUBLISHED
+}
+
+type User @model @auth(rules: [
+  { allow: owner, ownerField: "id", operations: [create, read, update] },
+  { allow: groups, groups: ["admin"] },
+  { allow: private, operations: [read] }
+]) {
+  id: ID!
+  email: String!
+  isAdmin: Boolean
+  isBlocked: Boolean
+  contactName: String
+  contactPhone: String
+  contactEmail: String
+  contactAddress: String
+  contactCity: String
+  contactState: String
+  contactZip: String
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+type Message @model @auth(rules: [
+  { allow: owner, ownerField: "senderId" },
+  { allow: owner, ownerField: "recipientId" },
+  { allow: groups, groups: ["admin"] }
+]) {
+  id: ID!
+  senderId: String!
+  senderEmail: String!
+  recipientId: String!
+  recipientEmail: String!
+  subject: String
+  body: String!
+  read: Boolean
+  archived: Boolean
+  important: Boolean
+  createdAt: AWSDateTime
+}
+
+type Product @model @auth(rules: [
+  { allow: private, operations: [read] },
+  { allow: groups, groups: ["admin"], operations: [create, read, update, delete] }
+]) {
+  id: ID!
+  name: String!
+  widthInches: Float!
+  basePrice: Float!
+  isArchived: Boolean
+  createdAt: AWSDateTime
+  updatedAt: AWSDateTime
+}
+
+type PricingSetting @model @auth(rules: [
+  { allow: private, operations: [read] },
+  { allow: groups, groups: ["admin"] }
+]) {
+  id: ID!
+  key: String!
+  value: Float!
+  label: String!
+  description: String
+  updatedAt: AWSDateTime
+}
