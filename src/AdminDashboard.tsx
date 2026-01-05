@@ -814,8 +814,8 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
         ...['pricePerBold', 'pricePerItalic', 'pricePerUnderline'].map(k => `${k}_${selectedPricingProduct}`),
         ...['left', 'center', 'right', 'justify'].map(t => `alignment_${t}_${selectedPricingProduct}`),
         ...['small', 'medium', 'large'].map(t => `size_${t}_${selectedPricingProduct}`),
-        ...['serif', 'sans-serif', 'monospace'].map(t => `font_${t}_${selectedPricingProduct}`),
-        ...['none', 'black', 'yellow', 'red', 'blue', 'green'].map(t => `highlight_${t}_${selectedPricingProduct}`),
+        ...['serif', 'sans-serif'].map(t => `font_${t}_${selectedPricingProduct}`),
+        ...['none', 'black', 'gray'].map(t => `highlight_${t}_${selectedPricingProduct}`),
       ]
       
       pricingKeys.forEach(key => {
@@ -2695,7 +2695,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                     <Paper variant="outlined" sx={{ p: 2, width: '100%', minHeight: 200, display: 'flex', flexDirection: 'column' }}>
                       <Typography variant="subtitle1" gutterBottom fontWeight={600}>Font</Typography>
                       <Stack spacing={1}>
-                        {['serif', 'sans-serif', 'monospace'].map(fontType => {
+                        {['serif', 'sans-serif'].map(fontType => {
                           const setting = pricingSettings.find(s => s.key === `font_${fontType}_${selectedPricingProduct}`)
                           return (
                             <Box key={fontType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -2727,7 +2727,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                     <Paper variant="outlined" sx={{ p: 2, width: '100%', minHeight: 200, display: 'flex', flexDirection: 'column' }}>
                       <Typography variant="subtitle1" gutterBottom fontWeight={600}>Text Highlight</Typography>
                       <Stack spacing={1}>
-                        {['none', 'black', 'yellow', 'red', 'blue', 'green'].map(highlightType => {
+                        {['none', 'black', 'gray'].map(highlightType => {
                           const setting = pricingSettings.find(s => s.key === `highlight_${highlightType}_${selectedPricingProduct}`)
                           return (
                             <Box key={highlightType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
