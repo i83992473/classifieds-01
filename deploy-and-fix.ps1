@@ -3,9 +3,9 @@
 
 param(
     [string]$CommitMessage = "Auto-deploy: $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')",
-    [int]$MaxAttempts = 5,
+    [int]$MaxAttempts = 60, # Increased to allow longer builds
     [int]$PollInterval = 30, # seconds
-    [int]$MaxWaitTime = 1800 # 30 minutes max wait
+    [int]$MaxWaitTime = 3600 # 60 minutes max wait
 )
 
 $AppId = "dva3ol6s006s"
