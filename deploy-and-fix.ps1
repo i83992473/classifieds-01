@@ -38,9 +38,9 @@ Write-Host ""
 Write-Host "[2/5] Pushing to repository..." -ForegroundColor Yellow
 try {
     git push origin main
-    Write-Host "✓ Successfully pushed to repository" -ForegroundColor Green
+    Write-Host "[OK] Successfully pushed to repository" -ForegroundColor Green
 } catch {
-    Write-Host "✗ Failed to push: $_" -ForegroundColor Red
+    Write-Host "[ERROR] Failed to push: $_" -ForegroundColor Red
     exit 1
 }
 
@@ -63,7 +63,7 @@ $attempts = 0
 while ($attempts -lt $MaxAttempts) {
     $elapsed = (Get-Date) - $startTime
     if ($elapsed.TotalSeconds -gt $MaxWaitTime) {
-        Write-Host "✗ Maximum wait time exceeded" -ForegroundColor Red
+        Write-Host "[ERROR] Maximum wait time exceeded" -ForegroundColor Red
         exit 1
     }
 
@@ -71,7 +71,8 @@ while ($attempts -lt $MaxAttempts) {
         # Get latest jobs
         $jobsJson = aws amplify list-jobs --app-id $AppId --branch-name $BranchName --region $Region --max-results 1 --output json 2>&1
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "Waiting for build to start... ($([math]::Round($elapsed.TotalSeconds))s elapsed)" -ForegroundColor Gray
+            $elapsedSeconds = [math]::Round($elapsed.TotalSeconds)
+            Write-Host "Waiting for build to start... ($elapsedSeconds s elapsed)" -ForegroundColor Gray
             Start-Sleep -Seconds $PollInterval
             continue
         }
@@ -79,7 +80,8 @@ while ($attempts -lt $MaxAttempts) {
         $jobs = $jobsJson | ConvertFrom-Json
         
         if ($jobs.jobSummaries.Count -eq 0) {
-            Write-Host "Waiting for build to start... ($([math]::Round($elapsed.TotalSeconds))s elapsed)" -ForegroundColor Gray
+            $elapsedSeconds = [math]::Round($elapsed.TotalSeconds)
+            Write-Host "Waiting for build to start... ($elapsedSeconds s elapsed)" -ForegroundColor Gray
             Start-Sleep -Seconds $PollInterval
             continue
         }
@@ -89,7 +91,7 @@ while ($attempts -lt $MaxAttempts) {
         if (-not $buildDetected) {
             $buildDetected = $true
             $jobId = $latestJob.jobId
-            Write-Host "✓ Build detected! Job ID: $jobId" -ForegroundColor Green
+            Write-Host "[OK] Build detected! Job ID: $jobId" -ForegroundColor Green
             Write-Host "  Commit: $($latestJob.commitMessage)" -ForegroundColor Gray
             Write-Host "  Status: $($latestJob.status)" -ForegroundColor Gray
             Write-Host ""
@@ -106,13 +108,14 @@ while ($attempts -lt $MaxAttempts) {
         $job = $jobJson | ConvertFrom-Json
         $status = $job.job.summary.status
         $elapsedBuild = (Get-Date) - [DateTime]::Parse($job.job.summary.startTime)
+        $elapsedBuildSeconds = [math]::Round($elapsedBuild.TotalSeconds)
 
-        Write-Host "Build Status: $status ($([math]::Round($elapsedBuild.TotalSeconds))s elapsed)" -ForegroundColor $(if ($status -eq "SUCCEED") { "Green" } elseif ($status -eq "FAILED") { "Red" } else { "Yellow" })
+        Write-Host "Build Status: $status ($elapsedBuildSeconds s elapsed)" -ForegroundColor $(if ($status -eq "SUCCEED") { "Green" } elseif ($status -eq "FAILED") { "Red" } else { "Yellow" })
 
         if ($status -eq "SUCCEED") {
             Write-Host ""
             Write-Host "========================================" -ForegroundColor Green
-            Write-Host "✓ BUILD SUCCEEDED!" -ForegroundColor Green
+            Write-Host "[SUCCESS] BUILD SUCCEEDED!" -ForegroundColor Green
             Write-Host "========================================" -ForegroundColor Green
             Write-Host ""
             Write-Host "Your app is now deployed!" -ForegroundColor Green
@@ -122,7 +125,7 @@ while ($attempts -lt $MaxAttempts) {
         if ($status -eq "FAILED") {
             Write-Host ""
             Write-Host "========================================" -ForegroundColor Red
-            Write-Host "✗ BUILD FAILED" -ForegroundColor Red
+            Write-Host "[FAILED] BUILD FAILED" -ForegroundColor Red
             Write-Host "========================================" -ForegroundColor Red
             Write-Host ""
 
@@ -133,7 +136,7 @@ while ($attempts -lt $MaxAttempts) {
                 Write-Host "Downloading build log to: $logFile" -ForegroundColor Yellow
                 try {
                     Invoke-WebRequest -Uri $buildStep.logUrl -OutFile $logFile -ErrorAction Stop
-                    Write-Host "✓ Log downloaded successfully" -ForegroundColor Green
+                    Write-Host "[OK] Log downloaded successfully" -ForegroundColor Green
                     Write-Host ""
                     
                     # Extract and display errors
@@ -161,7 +164,7 @@ while ($attempts -lt $MaxAttempts) {
                     Write-Host "3. Or manually fix the issues and run this script again" -ForegroundColor White
                     
                 } catch {
-                    Write-Host "✗ Failed to download log: $_" -ForegroundColor Red
+                    Write-Host "[ERROR] Failed to download log: $_" -ForegroundColor Red
                     Write-Host "Log URL: $($buildStep.logUrl)" -ForegroundColor Gray
                 }
             } else {
@@ -183,6 +186,6 @@ while ($attempts -lt $MaxAttempts) {
 }
 
 Write-Host ""
-Write-Host "✗ Maximum polling attempts reached" -ForegroundColor Red
+Write-Host "[ERROR] Maximum polling attempts reached" -ForegroundColor Red
 exit 1
 
