@@ -37,7 +37,6 @@ import {
   Tooltip,
   Badge,
   Checkbox,
-  Grid,
   FormControl,
   InputLabel,
   Select,
@@ -50,7 +49,6 @@ import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
 import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
 import BlockIcon from '@mui/icons-material/Block'
-import EmailIcon from '@mui/icons-material/Email'
 import ArchiveIcon from '@mui/icons-material/Archive'
 import MessageIcon from '@mui/icons-material/Message'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
@@ -61,6 +59,7 @@ import SaveIcon from '@mui/icons-material/Save'
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
 import SearchIcon from '@mui/icons-material/Search'
 import RefreshIcon from '@mui/icons-material/Refresh'
+import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
 import { getUrl } from 'aws-amplify/storage'
 import MessagesDialog from './MessagesDialog'
 import { updateUser } from './graphql/mutations'
@@ -357,7 +356,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
   
   const [activeTab, setActiveTab] = useState(0)
   const [isLoading, setIsLoading] = useState(false)
-  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
+  const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'warning' }>({
     open: false,
     message: '',
     severity: 'success'
@@ -848,7 +847,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                 }
               },
               authMode: 'userPool'
-            })
+            }) as Promise<any>
           )
         } else {
           // Create new setting
@@ -864,7 +863,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                 }
               },
               authMode: 'userPool'
-            })
+            }) as Promise<any>
           )
         }
       })
@@ -1249,6 +1248,33 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
     }
   }
 
+  const handleBulkUnpublishAds = async () => {
+    try {
+      const adsToUnpublish = selectedAds.map(adId => ads.find(a => a.id === adId)).filter((ad): ad is Ad => ad !== undefined)
+      
+      await Promise.all(adsToUnpublish.map(ad => {
+        return client.graphql({
+          query: updateAdMutation,
+          variables: {
+            input: {
+              id: ad.id,
+              status: 'APPROVED',
+              approved: true
+            }
+          },
+          authMode: 'userPool'
+        })
+      }))
+      
+      setSnackbar({ open: true, message: `${selectedAds.length} ads unpublished`, severity: 'success' })
+      setSelectedAds([])
+      loadAds()
+    } catch (error) {
+      console.error('Error bulk unpublishing ads:', error)
+      setSnackbar({ open: true, message: 'Failed to unpublish ads', severity: 'error' })
+    }
+  }
+
   const handleBulkArchiveAds = async () => {
     try {
       await Promise.all(selectedAds.map(adId => {
@@ -1292,10 +1318,13 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
   }
   
   const handleBulkMessageAdOwners = async () => {
-    const uniqueOwners = new Set(selectedAds.map(adId => {
+    const uniqueOwnersSet = new Set(selectedAds.map(adId => {
       const ad = ads.find(a => a.id === adId)
       return ad?.owner
     }).filter(Boolean))
+    const uniqueOwners = Array.from(uniqueOwnersSet)
+    // uniqueOwners will be used when implementing bulk messaging to multiple owners
+    console.log('Unique owners for bulk messaging:', uniqueOwners.length)
     
     setMessageRecipient(null)
     setMessageSubject('Regarding your ads')
@@ -1686,47 +1715,6 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
     }
   }
 
-  const handleUpdatePricing = async (setting: PricingSetting, newValue: number) => {
-    try {
-      await client.graphql({
-        query: updatePricingSettingMutation,
-        variables: {
-          input: {
-            id: setting.id,
-            value: newValue
-          }
-        },
-        authMode: 'userPool'
-      })
-      setSnackbar({ open: true, message: 'Pricing updated', severity: 'success' })
-      loadPricingSettings()
-    } catch (error) {
-      console.error('Error updating pricing:', error)
-      setSnackbar({ open: true, message: 'Failed to update pricing', severity: 'error' })
-    }
-  }
-  
-  const handleCreatePricingSetting = async (key: string, value: number, label: string, description?: string) => {
-    try {
-      await client.graphql({
-        query: createPricingSettingMutation,
-        variables: {
-          input: {
-            key,
-            value,
-            label,
-            description
-          }
-        },
-        authMode: 'userPool'
-      })
-      setSnackbar({ open: true, message: 'Pricing setting created', severity: 'success' })
-      loadPricingSettings()
-    } catch (error) {
-      console.error('Error creating pricing setting:', error)
-      setSnackbar({ open: true, message: 'Failed to create pricing setting', severity: 'error' })
-    }
-  }
 
   return (
     <Box sx={{ width: '100vw', minHeight: '100vh', bgcolor: 'background.default' }}>
@@ -2445,7 +2433,6 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                       <Typography variant="subtitle1" gutterBottom fontWeight={600}>Border Selection</Typography>
                       <Stack spacing={1}>
                         {['none', 'thin', 'thick', 'dashed'].map(borderType => {
-                          const setting = pricingSettings.find(s => s.key === `border_${borderType}_${selectedPricingProduct}`)
                           return (
                             <Box key={borderType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                               <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{borderType}</Typography>
@@ -2477,7 +2464,6 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                       <Typography variant="subtitle1" gutterBottom fontWeight={600}>Corners</Typography>
                       <Stack spacing={1}>
                         {['flat', 'rounded'].map(cornerType => {
-                          const setting = pricingSettings.find(s => s.key === `corner_${cornerType}_${selectedPricingProduct}`)
                           return (
                             <Box key={cornerType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                               <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{cornerType}</Typography>
@@ -2509,7 +2495,6 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                       <Typography variant="subtitle1" gutterBottom fontWeight={600}>Padding</Typography>
                       <Stack spacing={1}>
                         {['none', 'medium', 'large'].map(paddingType => {
-                          const setting = pricingSettings.find(s => s.key === `padding_${paddingType}_${selectedPricingProduct}`)
                           return (
                             <Box key={paddingType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                               <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{paddingType}</Typography>
@@ -2595,7 +2580,6 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                           { key: 'pricePerItalic', label: 'Italic Sections', desc: 'Price per text block with italic formatting' },
                           { key: 'pricePerUnderline', label: 'Underline Sections', desc: 'Price per text block with underline formatting' },
                         ].map(item => {
-                          const setting = pricingSettings.find(s => s.key === `${item.key}_${selectedPricingProduct}`)
                           return (
                             <Box key={item.key}>
                               <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 0.5 }}>
@@ -2632,7 +2616,6 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                       <Typography variant="subtitle1" gutterBottom fontWeight={600}>Text Alignment</Typography>
                       <Stack spacing={1}>
                         {['left', 'center', 'right', 'justify'].map(alignType => {
-                          const setting = pricingSettings.find(s => s.key === `alignment_${alignType}_${selectedPricingProduct}`)
                           return (
                             <Box key={alignType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                               <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{alignType}</Typography>
@@ -2664,7 +2647,6 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                       <Typography variant="subtitle1" gutterBottom fontWeight={600}>Text Size</Typography>
                       <Stack spacing={1}>
                         {['small', 'medium', 'large'].map(sizeType => {
-                          const setting = pricingSettings.find(s => s.key === `size_${sizeType}_${selectedPricingProduct}`)
                           return (
                             <Box key={sizeType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                               <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{sizeType}</Typography>
@@ -2696,7 +2678,6 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                       <Typography variant="subtitle1" gutterBottom fontWeight={600}>Font</Typography>
                       <Stack spacing={1}>
                         {['serif', 'sans-serif'].map(fontType => {
-                          const setting = pricingSettings.find(s => s.key === `font_${fontType}_${selectedPricingProduct}`)
                           return (
                             <Box key={fontType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                               <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{fontType}</Typography>
@@ -2728,7 +2709,6 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                       <Typography variant="subtitle1" gutterBottom fontWeight={600}>Text Highlight</Typography>
                       <Stack spacing={1}>
                         {['none', 'black', 'gray'].map(highlightType => {
-                          const setting = pricingSettings.find(s => s.key === `highlight_${highlightType}_${selectedPricingProduct}`)
                           return (
                             <Box key={highlightType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                               <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{highlightType}</Typography>

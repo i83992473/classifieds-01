@@ -103,6 +103,8 @@ interface Message {
   subject?: string
   body: string
   read: boolean
+  archived?: boolean
+  important?: boolean
   createdAt: string
 }
 

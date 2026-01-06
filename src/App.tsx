@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { generateClient } from 'aws-amplify/api'
-import { uploadData, getUrl, remove, list } from 'aws-amplify/storage'
+import { uploadData, getUrl, remove } from 'aws-amplify/storage'
 import {
   Box,
   Paper,
@@ -44,19 +44,14 @@ import FormatUnderlinedIcon from '@mui/icons-material/FormatUnderlined'
 import FormatAlignLeftIcon from '@mui/icons-material/FormatAlignLeft'
 import FormatAlignCenterIcon from '@mui/icons-material/FormatAlignCenter'
 import FormatAlignRightIcon from '@mui/icons-material/FormatAlignRight'
-import AddPhotoAlternateIcon from '@mui/icons-material/AddPhotoAlternate'
-import AddIcon from '@mui/icons-material/Add'
 import { useTheme } from '@mui/material/styles'
 import DeleteIcon from '@mui/icons-material/Delete'
-import EditIcon from '@mui/icons-material/Edit'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
-import TextFieldsIcon from '@mui/icons-material/TextFields'
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
 import SaveIcon from '@mui/icons-material/Save'
 import FolderOpenIcon from '@mui/icons-material/FolderOpen'
 import NoteAddIcon from '@mui/icons-material/NoteAdd'
-import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
 import LogoutIcon from '@mui/icons-material/Logout'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import ContactsIcon from '@mui/icons-material/Contacts'
@@ -164,8 +159,11 @@ interface Ad {
   approved?: boolean;
   approvedAt?: string;
   approvedBy?: string;
+  productName?: string;
+  totalPrice?: number;
   imageKeys?: string[];
   pdfKey?: string;
+  owner?: string;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -325,7 +323,8 @@ function App() {
       const session = await fetchAuthSession()
       const idTokenPayload = session.tokens?.idToken?.payload
       if (idTokenPayload) {
-        cognitoGroups = idTokenPayload['cognito:groups'] || []
+        const groups = idTokenPayload['cognito:groups']
+        cognitoGroups = Array.isArray(groups) ? (groups as string[]) : []
       }
       
       // Method 2: From user object idToken payload
@@ -970,7 +969,7 @@ function App() {
       })
 
       // Restore original image sources
-      blockIdToImgMap.forEach((img, blockId) => {
+      blockIdToImgMap.forEach((img) => {
         const originalSrc = originalSrcs.get(img)
         if (originalSrc) {
           img.src = originalSrc
@@ -1008,8 +1007,10 @@ function App() {
       await uploadData({
         path: pdfKey,
         data: pdfFile,
-        contentType: 'application/pdf',
-      })
+        options: {
+          contentType: 'application/pdf'
+        }
+      }).result
 
       // Update ad with PENDING_APPROVAL status and PDF key
       await client.graphql({
@@ -1096,66 +1097,6 @@ function App() {
     }
   }
 
-  // Remove approval (Edit button)
-  const removeApproval = async () => {
-    if (!currentAdId) return
-
-    setIsSaving(true)
-    try {
-      await client.graphql({
-        query: updateAd,
-        variables: {
-          input: {
-            id: currentAdId,
-            approved: false,
-            status: 'DRAFT',
-          }
-        },
-        authMode: 'userPool'
-      })
-
-      setAdApproved(false)
-      setAdStatus('DRAFT')
-
-      // Notify admins
-      try {
-        const usersResult = await client.graphql({
-          query: listUsers,
-          authMode: 'userPool'
-        }) as { data: { listUsers: { items: Array<{ id: string; email: string; isAdmin: boolean }> } } }
-
-        const adminUsers = usersResult.data.listUsers.items.filter(u => u.isAdmin)
-        const userEmail = user?.signInDetails?.loginId || 'User'
-
-        for (const admin of adminUsers) {
-          await client.graphql({
-            query: createMessage,
-            variables: {
-              input: {
-                senderId: user?.userId || '',
-                senderEmail: userEmail,
-                recipientId: admin.id,
-                recipientEmail: admin.email,
-                subject: `Ad "${adTitle}" approval removed`,
-                body: `Ad "${adTitle}" approval has been removed and is now editable. Ad ID: ${currentAdId}`,
-                read: false,
-              }
-            },
-            authMode: 'userPool'
-          })
-        }
-      } catch (error) {
-        console.error('Error sending messages to admins:', error)
-      }
-
-      setSnackbar({ open: true, message: 'Approval removed. Ad is now editable.', severity: 'success' })
-    } catch (error) {
-      console.error('Error removing approval:', error)
-      setSnackbar({ open: true, message: 'Failed to remove approval', severity: 'error' })
-    } finally {
-      setIsSaving(false)
-    }
-  }
 
   // Load ad from database
   const loadAd = async (adId: string) => {
@@ -1330,7 +1271,8 @@ function App() {
     }
   }
 
-  // Export ad as PDF
+  // Export ad as PDF - function kept for future use
+  // @ts-expect-error - Function is kept for future use
   const exportToPDF = async () => {
     if (!adPreviewRef.current) {
       setSnackbar({ open: true, message: 'Unable to export ad preview', severity: 'error' })
@@ -1406,9 +1348,9 @@ function App() {
           console.log('Image already loaded:', blockId, img.naturalWidth, 'x', img.naturalHeight)
           return // Already loaded
         }
-        console.log('Waiting for image to load:', blockId)
+        console.log('Waiting for image to load')
         loadPromises.push(
-          new Promise((resolve, reject) => {
+          new Promise((resolve) => {
             const timeout = setTimeout(() => {
               console.warn(`Image load timeout: ${blockId}`)
               // Don't reject, just resolve - continue even if timeout
@@ -1470,7 +1412,7 @@ function App() {
       console.log('Canvas captured:', canvas.width, 'x', canvas.height)
 
       // Step 5: Restore original image sources
-      blockIdToImgMap.forEach((img, blockId) => {
+      blockIdToImgMap.forEach((img) => {
         const originalSrc = originalSrcs.get(img)
         if (originalSrc) {
           img.src = originalSrc
@@ -1560,7 +1502,8 @@ function App() {
     }
   }
 
-  // Delete ad from database
+  // Delete ad from database - function kept for future use
+  // @ts-expect-error - Function is kept for future use
   const deleteCurrentAd = async () => {
     if (!currentAdId) return
     
@@ -1711,7 +1654,8 @@ function App() {
   const pricing = calculatePricing()
   
   // Ruler component for vertical (left side)
-  const VerticalRuler = ({ heightPx, widthInches }: { heightPx: number; widthInches: number }) => {
+  // widthInches parameter kept for API consistency with HorizontalRuler but not used in this component
+  const VerticalRuler = ({ heightPx, widthInches: _widthInches }: { heightPx: number; widthInches: number }) => {
     const pixelsPerInch = 96
     const heightInches = heightPx / pixelsPerInch
     const rulerWidth = 25 // pixels
@@ -1969,7 +1913,6 @@ function App() {
                     const totalPrice = (product?.basePrice || 0) + wordPrice + imagePrice + decorationPrice + highlightPrice
                     
                     // Get approval status
-                    const isApproved = ad.approved || false
                     const status = ad.status || 'DRAFT'
                     
                     return (
@@ -3544,7 +3487,7 @@ function App() {
               ref={adPreviewRef}
               elevation={borderStyle === 'none' ? 1 : 3}
               className="ad-preview"
-              onClick={(e) => {
+              onClick={() => {
                 // Deselect when clicking on the Paper background
                 // Block clicks stop propagation, so this only fires for background clicks
                 setSelectedBlockId(null)
