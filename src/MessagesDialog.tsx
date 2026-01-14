@@ -32,7 +32,6 @@ import StarIcon from '@mui/icons-material/Star'
 import StarBorderIcon from '@mui/icons-material/StarBorder'
 import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf'
 import OpenInNewIcon from '@mui/icons-material/OpenInNew'
-import CheckIcon from '@mui/icons-material/Check'
 
 const listMessagesQuery = /* GraphQL */ `
   query ListMessages($filter: ModelMessageFilterInput) {
@@ -84,15 +83,6 @@ const getAdQuery = /* GraphQL */ `
   }
 `
 
-const updateAdMutation = /* GraphQL */ `
-  mutation UpdateAd($input: UpdateAdInput!) {
-    updateAd(input: $input) {
-      id
-      status
-      approved
-    }
-  }
-`
 
 interface Message {
   id: string
@@ -127,7 +117,6 @@ export default function MessagesDialog({ open, onClose, unreadCount, onUnreadCou
   const [replyBody, setReplyBody] = useState('')
   const [pdfUrl, setPdfUrl] = useState<string | null>(null)
   const [isLoadingPdf, setIsLoadingPdf] = useState(false)
-  const [isProcessingAd, setIsProcessingAd] = useState(false)
 
   useEffect(() => {
     if (open) {
@@ -251,163 +240,6 @@ export default function MessagesDialog({ open, onClose, unreadCount, onUnreadCou
     }
   }
 
-  const sendMessageToAdOwner = async (adOwnerId: string, adOwnerEmail: string, adTitle: string, status: 'APPROVED' | 'NOT_APPROVED' | 'PUBLISHED') => {
-    try {
-      const statusMessages = {
-        'APPROVED': 'has been approved',
-        'NOT_APPROVED': 'has been not approved',
-        'PUBLISHED': 'has been published'
-      }
-      
-      await client.graphql({
-        query: createMessageMutation,
-        variables: {
-          input: {
-            senderId: user?.userId || '',
-            senderEmail: user?.signInDetails?.loginId || 'Admin',
-            recipientId: adOwnerId,
-            recipientEmail: adOwnerEmail,
-            subject: `Ad "${adTitle}" ${statusMessages[status]}`,
-            body: `Your ad "${adTitle}" ${statusMessages[status]}.`,
-            read: false
-          }
-        },
-        authMode: 'userPool'
-      })
-    } catch (error) {
-      console.error('Error sending message to ad owner:', error)
-    }
-  }
-
-  const handleApproveAd = async () => {
-    if (!selectedMessage) return
-    
-    const adIdMatch = selectedMessage.body.match(/Ad ID: ([a-zA-Z0-9-]+)/)
-    if (!adIdMatch || !adIdMatch[1]) return
-    
-    setIsProcessingAd(true)
-    try {
-      // Get ad info
-      const adResult = await client.graphql({
-        query: getAdQuery,
-        variables: { id: adIdMatch[1] },
-        authMode: 'userPool'
-      }) as { data: { getAd: { id: string; title: string; owner: string } | null } }
-      
-      if (!adResult.data?.getAd) {
-        console.error('Ad not found')
-        return
-      }
-      
-      const ad = adResult.data.getAd
-      
-      // Update ad status
-      await client.graphql({
-        query: updateAdMutation,
-        variables: {
-          input: {
-            id: ad.id,
-            approved: true,
-            approvedAt: new Date().toISOString(),
-            approvedBy: user?.signInDetails?.loginId,
-            status: 'APPROVED'
-          }
-        },
-        authMode: 'userPool'
-      })
-      
-      // Get owner email from User table
-      const getUserQuery = /* GraphQL */ `
-        query GetUser($id: ID!) {
-          getUser(id: $id) {
-            id
-            email
-          }
-        }
-      `
-      const userResult = await client.graphql({
-        query: getUserQuery,
-        variables: { id: ad.owner },
-        authMode: 'userPool'
-      }) as { data: { getUser: { id: string; email: string } | null } }
-      
-      if (userResult.data?.getUser) {
-        await sendMessageToAdOwner(userResult.data.getUser.id, userResult.data.getUser.email, ad.title, 'APPROVED')
-      }
-      
-      // Close dialog and reload messages
-      onClose()
-      loadMessages()
-    } catch (error) {
-      console.error('Error approving ad:', error)
-    } finally {
-      setIsProcessingAd(false)
-    }
-  }
-
-  const handleRejectAd = async () => {
-    if (!selectedMessage) return
-    
-    const adIdMatch = selectedMessage.body.match(/Ad ID: ([a-zA-Z0-9-]+)/)
-    if (!adIdMatch || !adIdMatch[1]) return
-    
-    setIsProcessingAd(true)
-    try {
-      // Get ad info
-      const adResult = await client.graphql({
-        query: getAdQuery,
-        variables: { id: adIdMatch[1] },
-        authMode: 'userPool'
-      }) as { data: { getAd: { id: string; title: string; owner: string } | null } }
-      
-      if (!adResult.data?.getAd) {
-        console.error('Ad not found')
-        return
-      }
-      
-      const ad = adResult.data.getAd
-      
-      // Update ad status
-      await client.graphql({
-        query: updateAdMutation,
-        variables: {
-          input: {
-            id: ad.id,
-            approved: false,
-            status: 'NOT_APPROVED'
-          }
-        },
-        authMode: 'userPool'
-      })
-      
-      // Get owner email from User table
-      const getUserQuery = /* GraphQL */ `
-        query GetUser($id: ID!) {
-          getUser(id: $id) {
-            id
-            email
-          }
-        }
-      `
-      const userResult = await client.graphql({
-        query: getUserQuery,
-        variables: { id: ad.owner },
-        authMode: 'userPool'
-      }) as { data: { getUser: { id: string; email: string } | null } }
-      
-      if (userResult.data?.getUser) {
-        await sendMessageToAdOwner(userResult.data.getUser.id, userResult.data.getUser.email, ad.title, 'NOT_APPROVED')
-      }
-      
-      // Close dialog and reload messages
-      onClose()
-      loadMessages()
-    } catch (error) {
-      console.error('Error rejecting ad:', error)
-    } finally {
-      setIsProcessingAd(false)
-    }
-  }
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -454,39 +286,19 @@ export default function MessagesDialog({ open, onClose, unreadCount, onUnreadCou
               {/* Extract ad ID from message body if it contains "Ad ID:" */}
               {selectedMessage.body.includes('Ad ID:') && onNavigateToAdmin && (
                 <Box sx={{ mb: 2 }}>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Button
-                      variant="contained"
-                      color="success"
-                      startIcon={<CheckIcon />}
-                      onClick={handleApproveAd}
-                      disabled={isProcessingAd}
-                    >
-                      Approve
-                    </Button>
-                    <Button
-                      variant="contained"
-                      color="error"
-                      startIcon={<CloseIcon />}
-                      onClick={handleRejectAd}
-                      disabled={isProcessingAd}
-                    >
-                      Not Approved
-                    </Button>
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      onClick={() => {
-                        const adIdMatch = selectedMessage.body.match(/Ad ID: ([a-zA-Z0-9-]+)/)
-                        if (adIdMatch && adIdMatch[1]) {
-                          onNavigateToAdmin(adIdMatch[1])
-                          onClose()
-                        }
-                      }}
-                    >
-                      View in Admin Dashboard
-                    </Button>
-                  </Stack>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    onClick={() => {
+                      const adIdMatch = selectedMessage.body.match(/Ad ID: ([a-zA-Z0-9-]+)/)
+                      if (adIdMatch && adIdMatch[1]) {
+                        onNavigateToAdmin(adIdMatch[1])
+                        onClose()
+                      }
+                    }}
+                  >
+                    View in Admin Dashboard
+                  </Button>
                 </Box>
               )}
             <Divider sx={{ my: 2 }} />

@@ -1771,6 +1771,12 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
         onClose={() => setShowMessagesDialog(false)} 
         unreadCount={unreadMessageCount}
         onUnreadCountChange={setUnreadMessageCount}
+        onNavigateToAdmin={(adId) => {
+          setAdIdSearch(adId)
+          setAdStatusFilter('PENDING_APPROVAL')
+          setActiveTab(0) // Switch to ADS tab
+          setShowMessagesDialog(false) // Close messages dialog
+        }}
       />
       
       {/* Contact Info Dialog */}
