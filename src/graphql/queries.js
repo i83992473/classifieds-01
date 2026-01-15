@@ -65,6 +65,11 @@ export const getUser = /* GraphQL */ `
       contactCity
       contactState
       contactZip
+      savedCardLast4
+      savedCardBrand
+      savedCardExpMonth
+      savedCardExpYear
+      savedCardCvv
       createdAt
       updatedAt
       __typename

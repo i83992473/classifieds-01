@@ -68,11 +68,12 @@ import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
 import AdminDashboard from './AdminDashboard'
 import MessagesDialog from './MessagesDialog'
+import PaymentDialog from './PaymentDialog'
 import './App.css'
 
 // Import GraphQL operations
-import { createAd, updateAd, deleteAd, updateUser, createMessage } from './graphql/mutations'
-import { listAds, getAd, listUsers, listProducts } from './graphql/queries'
+import { createAd, updateAd, deleteAd, updateUser, createMessage, createUser } from './graphql/mutations'
+import { listAds, getAd, listUsers, listProducts, getUser } from './graphql/queries'
 
 // Text formatting options
 type TextAlignment = 'left' | 'center' | 'right';
@@ -297,6 +298,15 @@ function App() {
     zip: '',
   })
 
+  // Payment dialog state
+  const [paymentDialogOpen, setPaymentDialogOpen] = useState(false)
+  const [savedCard, setSavedCard] = useState<{
+    last4: string
+    brand: string
+    expMonth: string
+    expYear: string
+  } | undefined>(undefined)
+
   // Load saved ads list when user is fully authenticated and route appropriately
   useEffect(() => {
     if (authStatus === 'authenticated' && user) {
@@ -313,6 +323,9 @@ function App() {
     
     // Ensure User record exists in database
     await ensureUserRecord(userId, email || '')
+    
+    // Load saved card after user record is ensured
+    await loadSavedCard()
     
     // Check admin status: must be in both Cognito Admin group AND have isAdmin=true in database
     // Try multiple ways to get Cognito groups from the token
@@ -481,23 +494,133 @@ function App() {
     }
   }, [products.length, currentAdId]) // Only depend on products.length and currentAdId to avoid loops
   
+  // Load saved card info
+  const loadSavedCard = async () => {
+    if (!user?.userId) return
+    
+    try {
+      const result = await client.graphql({
+        query: getUser,
+        variables: { id: user.userId },
+        authMode: 'userPool'
+      }) as { data: { getUser: any } }
+      
+      if (result.data?.getUser?.savedCardLast4) {
+        setSavedCard({
+          last4: result.data.getUser.savedCardLast4,
+          brand: result.data.getUser.savedCardBrand || 'Card',
+          expMonth: result.data.getUser.savedCardExpMonth || '',
+          expYear: result.data.getUser.savedCardExpYear || '',
+        })
+      } else {
+        setSavedCard(undefined)
+      }
+    } catch (error: any) {
+      // Silently handle errors - card fields might not exist in schema yet
+      const errorMessage = error.errors?.[0]?.message || error.message || ''
+      if (!errorMessage.includes('savedCardLast4') && !errorMessage.includes('Unknown field')) {
+        console.error('Error loading saved card:', error)
+      }
+      setSavedCard(undefined)
+    }
+  }
+
+  // Save card to user profile
+  const handleSaveCard = async (cardData: {
+    number: string
+    expMonth: string
+    expYear: string
+    cvv: string
+  }) => {
+    if (!user?.userId) return
+
+    try {
+      const last4 = cardData.number.slice(-4)
+      const brand = getCardBrand(cardData.number)
+      
+      await client.graphql({
+        query: updateUser,
+        variables: {
+          input: {
+            id: user.userId,
+            savedCardLast4: last4,
+            savedCardBrand: brand,
+            savedCardExpMonth: cardData.expMonth,
+            savedCardExpYear: cardData.expYear,
+            savedCardCvv: cardData.cvv, // In production, this should be encrypted
+          }
+        },
+        authMode: 'userPool'
+      })
+
+      setSavedCard({
+        last4,
+        brand,
+        expMonth: cardData.expMonth,
+        expYear: cardData.expYear,
+      })
+      
+      setSnackbar({ open: true, message: 'Card saved successfully', severity: 'success' })
+    } catch (error) {
+      console.error('Error saving card:', error)
+      setSnackbar({ open: true, message: 'Failed to save card', severity: 'error' })
+    }
+  }
+
+  // Update saved card
+  const handleUpdateCard = async (cardData: {
+    number: string
+    expMonth: string
+    expYear: string
+    cvv: string
+  }) => {
+    await handleSaveCard(cardData)
+  }
+
+  // Remove saved card
+  const handleRemoveCard = async () => {
+    if (!user?.userId) return
+
+    try {
+      await client.graphql({
+        query: updateUser,
+        variables: {
+          input: {
+            id: user.userId,
+            savedCardLast4: null,
+            savedCardBrand: null,
+            savedCardExpMonth: null,
+            savedCardExpYear: null,
+            savedCardCvv: null,
+          }
+        },
+        authMode: 'userPool'
+      })
+
+      setSavedCard(undefined)
+      setSnackbar({ open: true, message: 'Card removed successfully', severity: 'success' })
+    } catch (error) {
+      console.error('Error removing card:', error)
+      setSnackbar({ open: true, message: 'Failed to remove card', severity: 'error' })
+    }
+  }
+
+  // Helper function to get card brand
+  const getCardBrand = (number: string): string => {
+    const num = number.replace(/\s/g, '')
+    if (/^4/.test(num)) return 'Visa'
+    if (/^5[1-5]/.test(num)) return 'Mastercard'
+    if (/^3[47]/.test(num)) return 'American Express'
+    if (/^6(?:011|5)/.test(num)) return 'Discover'
+    return 'Card'
+  }
+
   // Ensure User record exists in database - create if missing
   const ensureUserRecord = async (userId: string, email: string) => {
     try {
       // Try to get existing user
-      const getUserQuery = /* GraphQL */ `
-        query GetUser($id: ID!) {
-          getUser(id: $id) {
-            id
-            email
-            isAdmin
-            isBlocked
-          }
-        }
-      `
-      
       const result = await client.graphql({
-        query: getUserQuery,
+        query: getUser,
         variables: { id: userId },
         authMode: 'userPool'
       }) as { data: { getUser: any } }
@@ -505,6 +628,8 @@ function App() {
       // User exists, we're done
       if (result.data?.getUser) {
         console.log('User record already exists:', email)
+        // Load saved card
+        await loadSavedCard()
         return
       }
       
@@ -538,20 +663,9 @@ function App() {
   // Helper function to create user record
   const createUserRecord = async (userId: string, email: string) => {
     try {
-      const createUserMutation = /* GraphQL */ `
-        mutation CreateUser($input: CreateUserInput!) {
-          createUser(input: $input) {
-            id
-            email
-            isAdmin
-            isBlocked
-          }
-        }
-      `
-      
       const adminEmails = ['iriley@mirabeltechnologies.com']
       const createResult = await client.graphql({
-        query: createUserMutation,
+        query: createUser,
         variables: {
           input: {
             id: userId,
@@ -565,11 +679,15 @@ function App() {
       
       console.log('✅ Created User record for:', email, createResult)
     } catch (createError: any) {
-      console.error('❌ Error creating User record:', {
-        email,
-        error: createError.errors || createError.message || createError,
-        fullError: createError
-      })
+      const errorMessage = createError.errors?.[0]?.message || createError.message || ''
+      // Only log if it's not a schema-related error (fields might not exist yet)
+      if (!errorMessage.includes('Unknown field') && !errorMessage.includes('savedCard')) {
+        console.error('❌ Error creating User record:', {
+          email,
+          error: createError.errors || createError.message || createError,
+          fullError: createError
+        })
+      }
       // Don't throw - allow app to continue even if user creation fails
     }
   }
@@ -884,8 +1002,29 @@ function App() {
     }
   }
 
-  // Submit ad for approval
+  // Submit ad for approval (now requires payment first)
   const submitForApproval = async () => {
+    if (!currentAdId) {
+      setSnackbar({ open: true, message: 'Please save the ad first', severity: 'error' })
+      return
+    }
+
+    // Calculate total price
+    const pricing = calculatePricing()
+    const totalPrice = pricing.subtotal
+    if (totalPrice <= 0) {
+      setSnackbar({ open: true, message: 'Please add content to your ad', severity: 'error' })
+      return
+    }
+
+    // Show payment dialog first
+    setPaymentDialogOpen(true)
+  }
+
+  // Handle payment success - proceed with submission
+  const handlePaymentSuccess = async (paymentMethod: 'new' | 'saved') => {
+    setPaymentDialogOpen(false)
+    
     if (!currentAdId) {
       setSnackbar({ open: true, message: 'Please save the ad first', severity: 'error' })
       return
@@ -2239,6 +2378,18 @@ function App() {
         onClose={() => setShowMessagesDialog(false)} 
         unreadCount={unreadMessageCount}
         onUnreadCountChange={setUnreadMessageCount}
+      />
+
+      {/* Payment Dialog */}
+      <PaymentDialog
+        open={paymentDialogOpen}
+        onClose={() => setPaymentDialogOpen(false)}
+        onPaymentSuccess={handlePaymentSuccess}
+        amount={calculatePricing().subtotal}
+        savedCard={savedCard}
+        onSaveCard={handleSaveCard}
+        onUpdateCard={handleUpdateCard}
+        onRemoveCard={handleRemoveCard}
       />
       
       {/* App Bar */}

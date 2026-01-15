@@ -87,6 +87,11 @@ export const createUser = /* GraphQL */ `
       contactCity
       contactState
       contactZip
+      savedCardLast4
+      savedCardBrand
+      savedCardExpMonth
+      savedCardExpYear
+      savedCardCvv
       createdAt
       updatedAt
       __typename
@@ -110,6 +115,11 @@ export const updateUser = /* GraphQL */ `
       contactCity
       contactState
       contactZip
+      savedCardLast4
+      savedCardBrand
+      savedCardExpMonth
+      savedCardExpYear
+      savedCardCvv
       createdAt
       updatedAt
       __typename
