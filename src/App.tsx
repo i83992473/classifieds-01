@@ -1022,7 +1022,7 @@ function App() {
   }
 
   // Handle payment success - proceed with submission
-  const handlePaymentSuccess = async (paymentMethod: 'new' | 'saved') => {
+  const handlePaymentSuccess = async (_paymentMethod: 'new' | 'saved') => {
     setPaymentDialogOpen(false)
     
     if (!currentAdId) {
