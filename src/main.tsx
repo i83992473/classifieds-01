@@ -4,6 +4,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles'
 import CssBaseline from '@mui/material/CssBaseline'
 import './index.css'
 import App from './App.tsx'
+import { withAuthenticator } from './amplify-client.tsx'
 
 // Frosted Aura color scheme
 // Primary: #5c7e8f (steel blue)
@@ -61,7 +62,7 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <App />
+      {withAuthenticator(<App />)}
     </ThemeProvider>
   </StrictMode>,
 )
