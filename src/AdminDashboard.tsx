@@ -602,8 +602,10 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
         
         const { CognitoIdentityProviderClient, AdminAddUserToGroupCommand, AdminRemoveUserFromGroupCommand } = await import('@aws-sdk/client-cognito-identity-provider')
         
-        const awsconfig = await import('./aws-exports.js')
-        const userPoolId = awsconfig.default.aws_user_pools_id
+        const userPoolId = import.meta.env.VITE_COGNITO_USER_POOL_ID
+        if (!userPoolId) {
+          throw new Error('Missing VITE_COGNITO_USER_POOL_ID for admin operations.')
+        }
         
         const cognitoClient = new CognitoIdentityProviderClient({
           region,
@@ -1482,9 +1484,10 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
         // Import AWS SDK dynamically
         const { CognitoIdentityProviderClient, AdminAddUserToGroupCommand, AdminRemoveUserFromGroupCommand } = await import('@aws-sdk/client-cognito-identity-provider')
         
-        // Get user pool ID from awsconfig
-        const awsconfig = await import('./aws-exports.js')
-        const userPoolId = awsconfig.default.aws_user_pools_id
+        const userPoolId = import.meta.env.VITE_COGNITO_USER_POOL_ID
+        if (!userPoolId) {
+          throw new Error('Missing VITE_COGNITO_USER_POOL_ID for admin operations.')
+        }
         
         const cognitoClient = new CognitoIdentityProviderClient({
           region,

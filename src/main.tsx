@@ -1,10 +1,7 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { Amplify } from 'aws-amplify'
-import { Authenticator } from '@aws-amplify/ui-react'
 import { ThemeProvider, createTheme } from '@mui/material/styles'
 import CssBaseline from '@mui/material/CssBaseline'
-import '@aws-amplify/ui-react/styles.css'
 import './index.css'
 import App from './App.tsx'
 
@@ -60,41 +57,11 @@ const theme = createTheme({
   },
 })
 
-// Import and configure Amplify BEFORE rendering
-import awsconfig from './aws-exports.js'
-
-// Configure Amplify with Gen 1 backend config
-Amplify.configure({
-  Auth: {
-    Cognito: {
-      userPoolId: awsconfig.aws_user_pools_id,
-      userPoolClientId: awsconfig.aws_user_pools_web_client_id,
-      identityPoolId: awsconfig.aws_cognito_identity_pool_id,
-      signUpVerificationMethod: 'code',
-    }
-  },
-  Storage: {
-    S3: {
-      bucket: awsconfig.aws_user_files_s3_bucket,
-      region: awsconfig.aws_user_files_s3_bucket_region,
-    }
-  },
-  API: {
-    GraphQL: {
-      endpoint: awsconfig.aws_appsync_graphqlEndpoint,
-      region: awsconfig.aws_appsync_region,
-      defaultAuthMode: 'userPool',
-    }
-  }
-})
-
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Authenticator>
-        <App />
-      </Authenticator>
+      <App />
     </ThemeProvider>
   </StrictMode>,
 )
