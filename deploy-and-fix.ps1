@@ -45,10 +45,47 @@ try {
     exit 1
 }
 
-# Step 3: Wait a bit for Amplify to detect the push
+$currentCommit = git rev-parse HEAD
+
+# Step 3: Ensure a build is running for the current commit
 Write-Host ""
-Write-Host "[3/5] Waiting for Amplify to detect push..." -ForegroundColor Yellow
+Write-Host "[3/5] Ensuring Amplify build is running..." -ForegroundColor Yellow
 Start-Sleep -Seconds 10
+
+$jobId = $null
+try {
+    $jobsJson = aws amplify list-jobs --app-id $AppId --branch-name $BranchName --region $Region --max-results 1 --output json --profile $AwsProfile 2>&1
+    if ($LASTEXITCODE -eq 0) {
+        $jobs = $jobsJson | ConvertFrom-Json
+        if ($jobs.jobSummaries.Count -gt 0) {
+            $latestJob = $jobs.jobSummaries[0]
+            if ($latestJob.commitId -eq $currentCommit) {
+                $jobId = $latestJob.jobId
+                Write-Host "[OK] Found build for current commit. Job ID: $jobId" -ForegroundColor Green
+            }
+        }
+    }
+} catch {
+    Write-Host "[WARN] Failed to query existing jobs: $_" -ForegroundColor Yellow
+}
+
+if (-not $jobId) {
+    Write-Host "Starting Amplify build for current commit..." -ForegroundColor Yellow
+    try {
+        $startJobJson = aws amplify start-job --app-id $AppId --branch-name $BranchName --region $Region --job-type RELEASE --output json --profile $AwsProfile 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "[ERROR] Failed to start build: $startJobJson" -ForegroundColor Red
+            exit 1
+        }
+
+        $startJob = $startJobJson | ConvertFrom-Json
+        $jobId = $startJob.jobSummary.jobId
+        Write-Host "[OK] Build started. Job ID: $jobId" -ForegroundColor Green
+    } catch {
+        Write-Host "[ERROR] Failed to start build: $_" -ForegroundColor Red
+        exit 1
+    }
+}
 
 # Step 4: Monitor build status
 Write-Host ""
@@ -58,7 +95,6 @@ Write-Host ""
 
 $startTime = Get-Date
 $buildDetected = $false
-$jobId = $null
 $attempts = 0
 
 while ($attempts -lt $MaxAttempts) {
@@ -79,7 +115,7 @@ while ($attempts -lt $MaxAttempts) {
         }
 
         $jobs = $jobsJson | ConvertFrom-Json
-        
+
         if ($jobs.jobSummaries.Count -eq 0) {
             $elapsedSeconds = [math]::Round($elapsed.TotalSeconds)
             Write-Host "Waiting for build to start... ($elapsedSeconds s elapsed)" -ForegroundColor Gray
@@ -87,14 +123,16 @@ while ($attempts -lt $MaxAttempts) {
             continue
         }
 
-        $latestJob = $jobs.jobSummaries[0]
-        
         if (-not $buildDetected) {
             $buildDetected = $true
-            $jobId = $latestJob.jobId
+            $currentJob = $jobs.jobSummaries | Where-Object { $_.jobId -eq $jobId }
+            if (-not $currentJob) {
+                $currentJob = $jobs.jobSummaries[0]
+                $jobId = $currentJob.jobId
+            }
             Write-Host "[OK] Build detected! Job ID: $jobId" -ForegroundColor Green
-            Write-Host "  Commit: $($latestJob.commitMessage)" -ForegroundColor Gray
-            Write-Host "  Status: $($latestJob.status)" -ForegroundColor Gray
+            Write-Host "  Commit: $($currentJob.commitMessage)" -ForegroundColor Gray
+            Write-Host "  Status: $($currentJob.status)" -ForegroundColor Gray
             Write-Host ""
         }
 
