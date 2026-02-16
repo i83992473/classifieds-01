@@ -11,6 +11,7 @@ param(
 $AppId = "d3lh2oph5fv7db"
 $BranchName = "main"
 $Region = "us-east-1"
+$AwsProfile = "classifieds-admin"
 $ErrorActionPreference = "Continue"
 
 Write-Host "========================================" -ForegroundColor Cyan
@@ -69,7 +70,7 @@ while ($attempts -lt $MaxAttempts) {
 
     try {
         # Get latest jobs
-        $jobsJson = aws amplify list-jobs --app-id $AppId --branch-name $BranchName --region $Region --max-results 1 --output json 2>&1
+        $jobsJson = aws amplify list-jobs --app-id $AppId --branch-name $BranchName --region $Region --max-results 1 --output json --profile $AwsProfile 2>&1
         if ($LASTEXITCODE -ne 0) {
             $elapsedSeconds = [math]::Round($elapsed.TotalSeconds)
             Write-Host "Waiting for build to start... ($elapsedSeconds s elapsed)" -ForegroundColor Gray
@@ -98,7 +99,7 @@ while ($attempts -lt $MaxAttempts) {
         }
 
         # Get detailed job status
-        $jobJson = aws amplify get-job --app-id $AppId --branch-name $BranchName --job-id $jobId --region $Region --output json 2>&1
+        $jobJson = aws amplify get-job --app-id $AppId --branch-name $BranchName --job-id $jobId --region $Region --output json --profile $AwsProfile 2>&1
         if ($LASTEXITCODE -ne 0) {
             Write-Host "Error getting job details: $jobJson" -ForegroundColor Red
             Start-Sleep -Seconds $PollInterval
