@@ -48,6 +48,4 @@ amplifytools.xcconfig
 .secret-*
 **.sample
 #amplify-do-not-edit-end
-# Amplify Gen 2 outputs (do not commit)
-amplify_outputs.json
 errors.txt

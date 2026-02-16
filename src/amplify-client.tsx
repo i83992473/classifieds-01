@@ -4,7 +4,12 @@ import type { ReactNode } from 'react'
 import '@aws-amplify/ui-react/styles.css'
 import outputs from '../amplify_outputs.json'
 
-Amplify.configure(outputs)
+const outputKeys = Object.keys(outputs ?? {})
+if (outputKeys.length > 1) {
+  Amplify.configure(outputs)
+} else {
+  console.warn('Amplify outputs not configured. Skipping Amplify.configure.')
+}
 
 export function withAuthenticator(children: ReactNode) {
   return <Authenticator>{children}</Authenticator>
