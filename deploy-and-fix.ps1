@@ -8,7 +8,7 @@ param(
     [int]$MaxWaitTime = 3600 # 60 minutes max wait
 )
 
-$AppId = "d39cdk72pisvhf"
+$AppId = "d3lh2oph5fv7db"
 $BranchName = "main"
 $Region = "us-east-1"
 $ErrorActionPreference = "Continue"
