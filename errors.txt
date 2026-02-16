@@ -1,0 +1,31 @@
+68
+
+2026-02-13T21:23:59.630Z [INFO]: # Completed phase: preBuild
+
+69
+
+                                 # Starting phase: build
+
+70
+
+                                 # Executing command: npm run build
+
+71
+
+2026-02-13T21:23:59.814Z [INFO]: > classified-01@0.0.0 build
+
+72
+
+                                 > tsc -b && vite build
+
+73
+
+2026-02-13T21:24:05.704Z [INFO]: src/amplify-client.tsx(4,21): error TS2307: Cannot find module '../amplify_outputs.json' or its corresponding type declarations.
+
+74
+
+2026-02-13T21:24:05.711Z [INFO]: src/amplify-client.tsx(8,45): error TS2503: Cannot find namespace 'JSX'.
+
+75
+
+2026-02-13T21:24:05.863Z [ERROR]: !!! Build failed
