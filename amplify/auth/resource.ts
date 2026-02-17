@@ -4,4 +4,11 @@ export const auth = defineAuth({
   loginWith: {
     email: true,
   },
+  userAttributes: {
+    email: {
+      required: true,
+    },
+  },
+  accountRecovery: 'EMAIL_ONLY',
+  groups: ['Admin'],
 })
