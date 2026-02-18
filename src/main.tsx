@@ -6,52 +6,83 @@ import './index.css'
 import App from './App.tsx'
 import { withAuthenticator } from './amplify-client.tsx'
 
-// Frosted Aura color scheme
-// Primary: #5c7e8f (steel blue)
-// Secondary: #a2a2a2 (gray)
-// Light: #d4dde2 (light gray-blue)
-// Background: #ffffff (white)
 const theme = createTheme({
   palette: {
     primary: {
-      main: '#5c7e8f',
-      light: '#8aacbd',
-      dark: '#3d5562',
-      contrastText: '#ffffff',
+      main: 'var(--color-primary)',
+      light: 'var(--color-primary-soft)',
+      dark: 'var(--color-primary-strong)',
+      contrastText: '#f9f9f9',
     },
     secondary: {
-      main: '#a2a2a2',
-      light: '#d4d4d4',
-      dark: '#717171',
+      main: 'var(--color-secondary)',
+      light: 'var(--color-secondary-soft)',
+      dark: '#6f747b',
       contrastText: '#ffffff',
     },
     background: {
-      default: '#d4dde2',
+      default: 'var(--color-surface)',
       paper: '#ffffff',
     },
     grey: {
-      50: '#f5f7f8',
-      100: '#d4dde2',
-      200: '#b8c5cc',
-      300: '#a2a2a2',
-      400: '#8a8a8a',
-      500: '#6e6e6e',
+      50: '#f5f6f7',
+      100: '#e2e4e7',
+      200: '#d3d6da',
+      300: '#c3c7cc',
+      400: '#8b9097',
+      500: '#6a6f76',
+    },
+    text: {
+      primary: 'var(--color-text)',
+      secondary: 'var(--color-text-muted)',
+    },
+  },
+  typography: {
+    fontFamily: '"IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif',
+    h1: {
+      fontWeight: 600,
+      letterSpacing: '-0.01em',
+    },
+    h2: {
+      fontWeight: 600,
+      letterSpacing: '-0.01em',
+    },
+    h6: {
+      fontWeight: 600,
     },
   },
   components: {
     MuiAppBar: {
       styleOverrides: {
         root: {
-          backgroundColor: '#5c7e8f',
+          backgroundColor: 'var(--color-primary)',
+          boxShadow: 'none',
+          borderBottom: '1px solid var(--color-border)',
         },
       },
     },
     MuiButton: {
       styleOverrides: {
         containedPrimary: {
+          backgroundColor: 'var(--color-primary)',
           '&:hover': {
-            backgroundColor: '#4a6a79',
+            backgroundColor: 'var(--color-primary-strong)',
           },
+        },
+        outlinedPrimary: {
+          borderColor: 'var(--color-primary)',
+          color: 'var(--color-primary)',
+          '&:hover': {
+            borderColor: 'var(--color-primary-strong)',
+            backgroundColor: 'rgba(75, 79, 85, 0.08)',
+          },
+        },
+      },
+    },
+    MuiPaper: {
+      styleOverrides: {
+        root: {
+          backgroundImage: 'none',
         },
       },
     },

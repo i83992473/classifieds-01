@@ -72,8 +72,32 @@ import PaymentDialog from './PaymentDialog'
 import './App.css'
 
 // Import GraphQL operations
-import { createAd, updateAd, deleteAd, updateUser, createMessage, createUser } from './graphql/mutations'
+import { createAd, updateAd, deleteAd, updateUser, createMessage } from './graphql/mutations'
 import { listAds, getAd, listUsers, listProducts, getUser } from './graphql/queries'
+
+const getUserRecordQuery = /* GraphQL */ `
+  query GetUserRecord($id: ID!) {
+    getUser(id: $id) {
+      id
+      email
+      isAdmin
+      isBlocked
+    }
+  }
+`
+
+const createUserRecordMutation = /* GraphQL */ `
+  mutation CreateUserRecord($input: CreateUserInput!) {
+    createUser(input: $input) {
+      id
+      email
+      isAdmin
+      isBlocked
+      createdAt
+      updatedAt
+    }
+  }
+`
 
 // Text formatting options
 type TextAlignment = 'left' | 'center' | 'right';
@@ -620,7 +644,7 @@ function App() {
     try {
       // Try to get existing user
       const result = await client.graphql({
-        query: getUser,
+        query: getUserRecordQuery,
         variables: { id: userId },
         authMode: 'userPool'
       }) as { data: { getUser: any } }
@@ -665,7 +689,7 @@ function App() {
     try {
       const adminEmails = ['iriley@mirabeltechnologies.com']
       const createResult = await client.graphql({
-        query: createUser,
+        query: createUserRecordMutation,
         variables: {
           input: {
             id: userId,

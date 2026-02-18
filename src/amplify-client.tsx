@@ -12,5 +12,33 @@ if (outputKeys.length > 1) {
 }
 
 export function withAuthenticator(children: ReactNode) {
-  return <Authenticator>{children}</Authenticator>
+  return (
+    <Authenticator
+      className="greyscale-auth"
+      formFields={{
+        signIn: {
+          username: { label: 'Email', placeholder: 'Enter your email', isRequired: true },
+        },
+        signUp: {
+          email: { label: 'Email', placeholder: 'Enter your email', isRequired: true },
+          password: { label: 'Password', placeholder: 'Create a strong password', isRequired: true },
+          confirm_password: { label: 'Confirm Password', placeholder: 'Re-enter your password', isRequired: true },
+        },
+        resetPassword: {
+          username: { label: 'Email', placeholder: 'Enter your email', isRequired: true },
+        },
+        confirmResetPassword: {
+          confirmation_code: { label: 'Verification Code', placeholder: 'Enter the code', isRequired: true },
+          password: { label: 'New Password', placeholder: 'Enter a new password', isRequired: true },
+        },
+        confirmSignUp: {
+          confirmation_code: { label: 'Verification Code', placeholder: 'Enter the code', isRequired: true },
+        },
+      }}
+      hideSignUp={false}
+      variation="modal"
+    >
+      {children}
+    </Authenticator>
+  )
 }
