@@ -24,13 +24,6 @@ export function withAuthenticator(children: ReactNode) {
           password: { label: 'Password', placeholder: 'Create a strong password', isRequired: true },
           confirm_password: { label: 'Confirm Password', placeholder: 'Re-enter your password', isRequired: true },
         },
-        resetPassword: {
-          username: { label: 'Email', placeholder: 'Enter your email', isRequired: true },
-        },
-        confirmResetPassword: {
-          confirmation_code: { label: 'Verification Code', placeholder: 'Enter the code', isRequired: true },
-          password: { label: 'New Password', placeholder: 'Enter a new password', isRequired: true },
-        },
         confirmSignUp: {
           confirmation_code: { label: 'Verification Code', placeholder: 'Enter the code', isRequired: true },
         },
