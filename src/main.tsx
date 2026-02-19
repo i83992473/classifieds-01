@@ -6,22 +6,42 @@ import './index.css'
 import App from './App.tsx'
 import { withAuthenticator } from './amplify-client.tsx'
 
+const getCssVar = (name: string, fallback: string) => {
+  if (typeof window === 'undefined') return fallback
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim()
+  return value || fallback
+}
+
+const themeTokens = {
+  primary: getCssVar('--color-primary', '#4b4f55'),
+  primaryStrong: getCssVar('--color-primary-strong', '#3b3f44'),
+  primarySoft: getCssVar('--color-primary-soft', '#6a6f76'),
+  secondary: getCssVar('--color-secondary', '#8b9097'),
+  secondarySoft: getCssVar('--color-secondary-soft', '#b6bbc1'),
+  surface: getCssVar('--color-surface', '#f5f6f7'),
+  surfaceStrong: getCssVar('--color-surface-strong', '#e2e4e7'),
+  surfaceMuted: getCssVar('--color-surface-muted', '#d3d6da'),
+  text: getCssVar('--color-text', '#1d1f22'),
+  textMuted: getCssVar('--color-text-muted', '#5d6269'),
+  border: getCssVar('--color-border', '#c3c7cc'),
+}
+
 const theme = createTheme({
   palette: {
     primary: {
-      main: 'var(--color-primary)',
-      light: 'var(--color-primary-soft)',
-      dark: 'var(--color-primary-strong)',
+      main: themeTokens.primary,
+      light: themeTokens.primarySoft,
+      dark: themeTokens.primaryStrong,
       contrastText: '#f9f9f9',
     },
     secondary: {
-      main: 'var(--color-secondary)',
-      light: 'var(--color-secondary-soft)',
+      main: themeTokens.secondary,
+      light: themeTokens.secondarySoft,
       dark: '#6f747b',
       contrastText: '#ffffff',
     },
     background: {
-      default: 'var(--color-surface)',
+      default: themeTokens.surface,
       paper: '#ffffff',
     },
     grey: {
@@ -33,8 +53,8 @@ const theme = createTheme({
       500: '#6a6f76',
     },
     text: {
-      primary: 'var(--color-text)',
-      secondary: 'var(--color-text-muted)',
+      primary: themeTokens.text,
+      secondary: themeTokens.textMuted,
     },
   },
   typography: {
@@ -55,25 +75,25 @@ const theme = createTheme({
     MuiAppBar: {
       styleOverrides: {
         root: {
-          backgroundColor: 'var(--color-primary)',
+          backgroundColor: themeTokens.primary,
           boxShadow: 'none',
-          borderBottom: '1px solid var(--color-border)',
+          borderBottom: `1px solid ${themeTokens.border}`,
         },
       },
     },
     MuiButton: {
       styleOverrides: {
         containedPrimary: {
-          backgroundColor: 'var(--color-primary)',
+          backgroundColor: themeTokens.primary,
           '&:hover': {
-            backgroundColor: 'var(--color-primary-strong)',
+            backgroundColor: themeTokens.primaryStrong,
           },
         },
         outlinedPrimary: {
-          borderColor: 'var(--color-primary)',
-          color: 'var(--color-primary)',
+          borderColor: themeTokens.primary,
+          color: themeTokens.primary,
           '&:hover': {
-            borderColor: 'var(--color-primary-strong)',
+            borderColor: themeTokens.primaryStrong,
             backgroundColor: 'rgba(75, 79, 85, 0.08)',
           },
         },
