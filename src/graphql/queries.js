@@ -17,6 +17,7 @@ export const getAd = /* GraphQL */ `
       totalPrice
       imageKeys
       pdfKey
+      previewUrl
       owner
       createdAt
       updatedAt
@@ -41,6 +42,7 @@ export const listAds = /* GraphQL */ `
         totalPrice
         imageKeys
         pdfKey
+        previewUrl
         owner
         createdAt
         updatedAt
@@ -70,6 +72,11 @@ export const getUser = /* GraphQL */ `
       savedCardExpMonth
       savedCardExpYear
       savedCardCvv
+      adCount
+      archivedAdCount
+      totalSpending
+      lastActive
+      paymentMethod
       createdAt
       updatedAt
       __typename
@@ -95,6 +102,11 @@ export const listUsers = /* GraphQL */ `
         contactCity
         contactState
         contactZip
+        adCount
+        archivedAdCount
+        totalSpending
+        lastActive
+        paymentMethod
         createdAt
         updatedAt
         __typename
@@ -117,6 +129,7 @@ export const getMessage = /* GraphQL */ `
       read
       archived
       important
+      sentAt
       createdAt
       updatedAt
       __typename
@@ -141,6 +154,7 @@ export const listMessages = /* GraphQL */ `
         read
         archived
         important
+        sentAt
         createdAt
         updatedAt
         __typename
@@ -194,8 +208,8 @@ export const getPricingSetting = /* GraphQL */ `
       value
       label
       description
-      updatedAt
       createdAt
+      updatedAt
       __typename
     }
   }
@@ -213,8 +227,8 @@ export const listPricingSettings = /* GraphQL */ `
         value
         label
         description
-        updatedAt
         createdAt
+        updatedAt
         __typename
       }
       nextToken

@@ -17,6 +17,7 @@ export const createAd = /* GraphQL */ `
       totalPrice
       imageKeys
       pdfKey
+      previewUrl
       owner
       createdAt
       updatedAt
@@ -40,6 +41,7 @@ export const updateAd = /* GraphQL */ `
       totalPrice
       imageKeys
       pdfKey
+      previewUrl
       owner
       createdAt
       updatedAt
@@ -63,6 +65,7 @@ export const deleteAd = /* GraphQL */ `
       totalPrice
       imageKeys
       pdfKey
+      previewUrl
       owner
       createdAt
       updatedAt
@@ -92,6 +95,11 @@ export const createUser = /* GraphQL */ `
       savedCardExpMonth
       savedCardExpYear
       savedCardCvv
+      adCount
+      archivedAdCount
+      totalSpending
+      lastActive
+      paymentMethod
       createdAt
       updatedAt
       __typename
@@ -120,6 +128,11 @@ export const updateUser = /* GraphQL */ `
       savedCardExpMonth
       savedCardExpYear
       savedCardCvv
+      adCount
+      archivedAdCount
+      totalSpending
+      lastActive
+      paymentMethod
       createdAt
       updatedAt
       __typename
@@ -143,6 +156,11 @@ export const deleteUser = /* GraphQL */ `
       contactCity
       contactState
       contactZip
+      adCount
+      archivedAdCount
+      totalSpending
+      lastActive
+      paymentMethod
       createdAt
       updatedAt
       __typename
@@ -165,6 +183,7 @@ export const createMessage = /* GraphQL */ `
       read
       archived
       important
+      sentAt
       createdAt
       updatedAt
       __typename
@@ -187,6 +206,7 @@ export const updateMessage = /* GraphQL */ `
       read
       archived
       important
+      sentAt
       createdAt
       updatedAt
       __typename
@@ -209,6 +229,7 @@ export const deleteMessage = /* GraphQL */ `
       read
       archived
       important
+      sentAt
       createdAt
       updatedAt
       __typename
@@ -277,8 +298,8 @@ export const createPricingSetting = /* GraphQL */ `
       value
       label
       description
-      updatedAt
       createdAt
+      updatedAt
       __typename
     }
   }
@@ -294,8 +315,8 @@ export const updatePricingSetting = /* GraphQL */ `
       value
       label
       description
-      updatedAt
       createdAt
+      updatedAt
       __typename
     }
   }
@@ -311,8 +332,8 @@ export const deletePricingSetting = /* GraphQL */ `
       value
       label
       description
-      updatedAt
       createdAt
+      updatedAt
       __typename
     }
   }
