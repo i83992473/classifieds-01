@@ -37,6 +37,9 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  FormGroup,
+  FormControlLabel,
+  Checkbox,
 } from '@mui/material'
 import FormatBoldIcon from '@mui/icons-material/FormatBold'
 import FormatItalicIcon from '@mui/icons-material/FormatItalic'
@@ -73,7 +76,7 @@ import './App.css'
 
 // Import GraphQL operations
 import { createAd, updateAd, deleteAd, updateUser, createMessage } from './graphql/mutations'
-import { listAds, getAd, listUsers, listProducts, getUser } from './graphql/queries'
+import { listAds, getAd, listUsers, listProducts, getUser, listPlacements } from './graphql/queries'
 
 const getUserRecordQuery = /* GraphQL */ `
   query GetUserRecord($id: ID!) {
@@ -191,6 +194,16 @@ interface Ad {
   owner?: string;
   createdAt?: string;
   updatedAt?: string;
+  placementIds?: string[];
+}
+
+interface Placement {
+  id: string;
+  productId: string;
+  name: string;
+  description?: string;
+  addonFee: number;
+  isArchived: boolean;
 }
 
 const SIDEBAR_WIDTH = 320;
@@ -235,7 +248,9 @@ function App() {
   const [sidebarTab, setSidebarTab] = useState(0) // 0 = My Ad, 1 = Content, 2 = Pricing
   const [isResizing, setIsResizing] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<string>('')
-  
+  const [placements, setPlacements] = useState<Placement[]>([])
+  const [selectedPlacements, setSelectedPlacements] = useState<string[]>([])
+
   // Admin and messaging state
   const [showAdminDashboard, setShowAdminDashboard] = useState(false)
   const [showMessagesDialog, setShowMessagesDialog] = useState(false)
@@ -503,6 +518,25 @@ function App() {
       // Set empty array on error so UI doesn't break
       setProducts([])
       return []
+    }
+  }
+
+  const loadPlacementsForProduct = async (productId: string) => {
+    if (!productId) {
+      setPlacements([])
+      return
+    }
+    try {
+      const result = await client.graphql({
+        query: listPlacements,
+        variables: { filter: { productId: { eq: productId } } },
+        authMode: 'userPool'
+      }) as { data: { listPlacements: { items: Placement[] } } }
+      const active = (result.data.listPlacements.items || []).filter(p => !p.isArchived)
+      setPlacements(active)
+    } catch (error) {
+      console.error('Error loading placements:', error)
+      setPlacements([])
     }
   }
 
@@ -975,6 +1009,7 @@ function App() {
         imageKeys,
         productName,
         totalPrice,
+        placementIds: selectedPlacements.length > 0 ? selectedPlacements : undefined,
       }
       
       if (currentAdId) {
@@ -1336,8 +1371,12 @@ function App() {
           const matchingProduct = products.find(p => p.name === ad.productName)
           if (matchingProduct) {
             setSelectedProduct(matchingProduct.id)
+            await loadPlacementsForProduct(matchingProduct.id)
           }
         }
+
+        // Restore placement selections
+        setSelectedPlacements(ad.placementIds || [])
         
         // Restore approval status
         setAdApproved(ad.approved || false)
@@ -1397,6 +1436,13 @@ function App() {
     // Reset approval status
     setAdApproved(false)
     setAdStatus('DRAFT')
+    // Reset placements
+    setSelectedPlacements([])
+    if (firstProduct) {
+      loadPlacementsForProduct(firstProduct.id)
+    } else {
+      setPlacements([])
+    }
   }
 
   // Helper function to convert image URL to base64 data URL with better error handling
@@ -1793,15 +1839,18 @@ function App() {
     const stats = calculateStats()
     const product = products.find(p => p.id === selectedProduct)
     const productPrice = product?.basePrice || 0
-    
+
     const wordPrice = stats.totalWords * PRICING_DATA.pricePerWord
     const linePrice = stats.totalLines * PRICING_DATA.pricePerLine
     const imagePrice = stats.imageCount * PRICING_DATA.pricePerImage
     const decorationPrice = stats.textSectionsWithDecorations * PRICING_DATA.pricePerDecoration
     const highlightPrice = stats.textSectionsWithHighlights * PRICING_DATA.pricePerHighlight
-    
-    const subtotal = wordPrice + linePrice + imagePrice + decorationPrice + highlightPrice + productPrice
-    
+    const placementFees = placements
+      .filter(p => selectedPlacements.includes(p.id))
+      .reduce((sum, p) => sum + (p.addonFee || 0), 0)
+
+    const subtotal = wordPrice + linePrice + imagePrice + decorationPrice + highlightPrice + productPrice + placementFees
+
     return {
       productPrice,
       wordPrice,
@@ -1809,6 +1858,7 @@ function App() {
       imagePrice,
       decorationPrice,
       highlightPrice,
+      placementFees,
       subtotal,
     }
   }
@@ -2812,6 +2862,9 @@ function App() {
                             const product = products.find(p => p.id === e.target.value)
                             setAdTitle(`${product?.name || 'Product'}-${dateStr}`)
                           }
+                          // Load placements for newly selected product
+                          setSelectedPlacements([])
+                          loadPlacementsForProduct(e.target.value)
                         }}
                         renderValue={(value) => {
                           if (!value || value === '') {
@@ -2829,6 +2882,50 @@ function App() {
                       </Select>
                     </FormControl>
                   </Box>
+
+                  {/* Placement Multi-Select */}
+                  {placements.length > 0 && (
+                    <Box mb={2}>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                        Placements
+                      </Typography>
+                      <FormGroup>
+                        {placements.map(placement => (
+                          <FormControlLabel
+                            key={placement.id}
+                            control={
+                              <Checkbox
+                                size="small"
+                                checked={selectedPlacements.includes(placement.id)}
+                                onChange={(e) => {
+                                  setSelectedPlacements(prev =>
+                                    e.target.checked
+                                      ? [...prev, placement.id]
+                                      : prev.filter(id => id !== placement.id)
+                                  )
+                                }}
+                              />
+                            }
+                            label={
+                              <Typography variant="body2">
+                                {placement.name}
+                                {placement.description && (
+                                  <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+                                    — {placement.description}
+                                  </Typography>
+                                )}
+                                {placement.addonFee > 0 && (
+                                  <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+                                    (+${placement.addonFee.toFixed(2)})
+                                  </Typography>
+                                )}
+                              </Typography>
+                            }
+                          />
+                        ))}
+                      </FormGroup>
+                    </Box>
+                  )}
 
                   {/* Ad Name */}
                   <Box mb={2}>
@@ -3482,6 +3579,22 @@ function App() {
                             </TableRow>
                           )}
                           
+                          {/* Placement Fees */}
+                          {selectedPlacements.length > 0 && pricing.placementFees > 0 && (
+                            <TableRow>
+                              <TableCell sx={{ borderBottom: 'none', pl: 4 }}>
+                                <Typography variant="body2" color="text.secondary">
+                                  Placements ({placements.filter(p => selectedPlacements.includes(p.id)).map(p => p.name).join(', ')})
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="right" sx={{ borderBottom: 'none' }}>
+                                <Typography variant="body2" fontWeight={500}>
+                                  ${pricing.placementFees.toFixed(2)}
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          )}
+
                           {/* Total */}
                           <TableRow>
                             <TableCell sx={{ borderTop: 1, borderColor: 'divider' }}>

@@ -21,6 +21,7 @@ export const createAd = /* GraphQL */ `
       owner
       createdAt
       updatedAt
+      placementIds
       __typename
     }
   }
@@ -45,6 +46,7 @@ export const updateAd = /* GraphQL */ `
       owner
       createdAt
       updatedAt
+      placementIds
       __typename
     }
   }
@@ -69,6 +71,7 @@ export const deleteAd = /* GraphQL */ `
       owner
       createdAt
       updatedAt
+      placementIds
       __typename
     }
   }
@@ -332,6 +335,51 @@ export const deletePricingSetting = /* GraphQL */ `
       value
       label
       description
+      createdAt
+      updatedAt
+      __typename
+    }
+  }
+`;
+export const createPlacement = /* GraphQL */ `
+  mutation CreatePlacement($input: CreatePlacementInput!, $condition: ModelPlacementConditionInput) {
+    createPlacement(input: $input, condition: $condition) {
+      id
+      productId
+      name
+      description
+      addonFee
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+  }
+`;
+export const updatePlacement = /* GraphQL */ `
+  mutation UpdatePlacement($input: UpdatePlacementInput!, $condition: ModelPlacementConditionInput) {
+    updatePlacement(input: $input, condition: $condition) {
+      id
+      productId
+      name
+      description
+      addonFee
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+  }
+`;
+export const deletePlacement = /* GraphQL */ `
+  mutation DeletePlacement($input: DeletePlacementInput!, $condition: ModelPlacementConditionInput) {
+    deletePlacement(input: $input, condition: $condition) {
+      id
+      productId
+      name
+      description
+      addonFee
+      isArchived
       createdAt
       updatedAt
       __typename

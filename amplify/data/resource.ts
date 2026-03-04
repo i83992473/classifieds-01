@@ -17,6 +17,7 @@ const schema = a.schema({
     previewUrl: a.string(),
     owner: a.string(),
     createdAt: a.datetime(),
+    placementIds: a.string().array(),
   }).authorization(allow => [allow.owner()]),
 
   User: a.model({
@@ -47,14 +48,31 @@ const schema = a.schema({
     widthInches: a.float().required(),
     basePrice: a.float().required(),
     isArchived: a.boolean().default(false),
-  }).authorization(allow => [allow.owner()]),
+  }).authorization(allow => [
+    allow.owner(),
+    allow.authenticated().to(['read']),
+  ]),
 
   PricingSetting: a.model({
     key: a.string().required(),
     value: a.float().required(),
     label: a.string(),
     description: a.string(),
-  }).authorization(allow => [allow.owner()]),
+  }).authorization(allow => [
+    allow.owner(),
+    allow.authenticated().to(['read']),
+  ]),
+
+  Placement: a.model({
+    productId: a.string().required(),
+    name: a.string().required(),
+    description: a.string(),
+    addonFee: a.float().default(0),
+    isArchived: a.boolean().default(false),
+  }).authorization(allow => [
+    allow.owner(),
+    allow.authenticated().to(['read']),
+  ]),
 
   Message: a.model({
     senderId: a.string(),

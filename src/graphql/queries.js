@@ -21,6 +21,7 @@ export const getAd = /* GraphQL */ `
       owner
       createdAt
       updatedAt
+      placementIds
       __typename
     }
   }
@@ -46,6 +47,7 @@ export const listAds = /* GraphQL */ `
         owner
         createdAt
         updatedAt
+        placementIds
         __typename
       }
       nextToken
@@ -227,6 +229,40 @@ export const listPricingSettings = /* GraphQL */ `
         value
         label
         description
+        createdAt
+        updatedAt
+        __typename
+      }
+      nextToken
+      __typename
+    }
+  }
+`;
+export const getPlacement = /* GraphQL */ `
+  query GetPlacement($id: ID!) {
+    getPlacement(id: $id) {
+      id
+      productId
+      name
+      description
+      addonFee
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+  }
+`;
+export const listPlacements = /* GraphQL */ `
+  query ListPlacements($filter: ModelPlacementFilterInput, $limit: Int, $nextToken: String) {
+    listPlacements(filter: $filter, limit: $limit, nextToken: $nextToken) {
+      items {
+        id
+        productId
+        name
+        description
+        addonFee
+        isArchived
         createdAt
         updatedAt
         __typename
