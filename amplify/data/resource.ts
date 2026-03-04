@@ -64,10 +64,19 @@ const schema = a.schema({
   ]),
 
   Placement: a.model({
-    productId: a.string().required(),
     name: a.string().required(),
     description: a.string(),
-    addonFee: a.float().default(0),
+    defaultAddonFee: a.float().default(0),
+    isArchived: a.boolean().default(false),
+  }).authorization(allow => [
+    allow.owner(),
+    allow.authenticated().to(['read']),
+  ]),
+
+  ProductPlacement: a.model({
+    productId: a.string().required(),
+    placementId: a.string().required(),
+    addonFeeOverride: a.float(),
     isArchived: a.boolean().default(false),
   }).authorization(allow => [
     allow.owner(),

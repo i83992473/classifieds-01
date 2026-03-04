@@ -10,4 +10,6 @@ export declare const getPricingSetting: string;
 export declare const listPricingSettings: string;
 export declare const getPlacement: string;
 export declare const listPlacements: string;
+export declare const getProductPlacement: string;
+export declare const listProductPlacements: string;
 

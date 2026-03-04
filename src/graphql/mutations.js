@@ -345,10 +345,9 @@ export const createPlacement = /* GraphQL */ `
   mutation CreatePlacement($input: CreatePlacementInput!, $condition: ModelPlacementConditionInput) {
     createPlacement(input: $input, condition: $condition) {
       id
-      productId
       name
       description
-      addonFee
+      defaultAddonFee
       isArchived
       createdAt
       updatedAt
@@ -360,10 +359,9 @@ export const updatePlacement = /* GraphQL */ `
   mutation UpdatePlacement($input: UpdatePlacementInput!, $condition: ModelPlacementConditionInput) {
     updatePlacement(input: $input, condition: $condition) {
       id
-      productId
       name
       description
-      addonFee
+      defaultAddonFee
       isArchived
       createdAt
       updatedAt
@@ -375,10 +373,51 @@ export const deletePlacement = /* GraphQL */ `
   mutation DeletePlacement($input: DeletePlacementInput!, $condition: ModelPlacementConditionInput) {
     deletePlacement(input: $input, condition: $condition) {
       id
-      productId
       name
       description
-      addonFee
+      defaultAddonFee
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+  }
+`;
+export const createProductPlacement = /* GraphQL */ `
+  mutation CreateProductPlacement($input: CreateProductPlacementInput!, $condition: ModelProductPlacementConditionInput) {
+    createProductPlacement(input: $input, condition: $condition) {
+      id
+      productId
+      placementId
+      addonFeeOverride
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+  }
+`;
+export const updateProductPlacement = /* GraphQL */ `
+  mutation UpdateProductPlacement($input: UpdateProductPlacementInput!, $condition: ModelProductPlacementConditionInput) {
+    updateProductPlacement(input: $input, condition: $condition) {
+      id
+      productId
+      placementId
+      addonFeeOverride
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+  }
+`;
+export const deleteProductPlacement = /* GraphQL */ `
+  mutation DeleteProductPlacement($input: DeleteProductPlacementInput!, $condition: ModelProductPlacementConditionInput) {
+    deleteProductPlacement(input: $input, condition: $condition) {
+      id
+      productId
+      placementId
+      addonFeeOverride
       isArchived
       createdAt
       updatedAt

@@ -76,7 +76,7 @@ import './App.css'
 
 // Import GraphQL operations
 import { createAd, updateAd, deleteAd, updateUser, createMessage } from './graphql/mutations'
-import { listAds, getAd, listUsers, listProducts, getUser, listPlacements } from './graphql/queries'
+import { listAds, getAd, listUsers, listProducts, getUser, listPlacements, listProductPlacements } from './graphql/queries'
 
 const getUserRecordQuery = /* GraphQL */ `
   query GetUserRecord($id: ID!) {
@@ -199,11 +199,18 @@ interface Ad {
 
 interface Placement {
   id: string;
-  productId: string;
   name: string;
   description?: string;
-  addonFee: number;
+  defaultAddonFee: number;
   isArchived: boolean;
+}
+
+// Resolved placement — merged Placement + ProductPlacement, effective fee computed
+interface ResolvedPlacement {
+  id: string;        // Placement.id — stored in Ad.placementIds
+  name: string;
+  description?: string;
+  effectiveFee: number; // addonFeeOverride ?? defaultAddonFee
 }
 
 const SIDEBAR_WIDTH = 320;
@@ -248,7 +255,7 @@ function App() {
   const [sidebarTab, setSidebarTab] = useState(0) // 0 = My Ad, 1 = Content, 2 = Pricing
   const [isResizing, setIsResizing] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<string>('')
-  const [placements, setPlacements] = useState<Placement[]>([])
+  const [placements, setPlacements] = useState<ResolvedPlacement[]>([])
   const [selectedPlacements, setSelectedPlacements] = useState<string[]>([])
 
   // Admin and messaging state
@@ -527,13 +534,29 @@ function App() {
       return
     }
     try {
-      const result = await client.graphql({
-        query: listPlacements,
-        variables: { filter: { productId: { eq: productId } } },
-        authMode: 'userPool'
-      }) as { data: { listPlacements: { items: Placement[] } } }
-      const active = (result.data.listPlacements.items || []).filter(p => !p.isArchived)
-      setPlacements(active)
+      const [ppResult, globalResult] = await Promise.all([
+        client.graphql({
+          query: listProductPlacements,
+          variables: { filter: { productId: { eq: productId } } },
+          authMode: 'userPool'
+        }) as Promise<{ data: { listProductPlacements: { items: Array<{ id: string; productId: string; placementId: string; addonFeeOverride?: number; isArchived: boolean }> } } }>,
+        client.graphql({
+          query: listPlacements,
+          authMode: 'userPool'
+        }) as Promise<{ data: { listPlacements: { items: Placement[] } } }>,
+      ])
+      const productPlacements = (ppResult.data.listProductPlacements.items || []).filter(pp => !pp.isArchived)
+      const globalPlacements = globalResult.data.listPlacements.items || []
+      const resolved: ResolvedPlacement[] = productPlacements.map(pp => {
+        const global = globalPlacements.find(p => p.id === pp.placementId)
+        return {
+          id: pp.placementId,
+          name: global?.name ?? pp.placementId,
+          description: global?.description,
+          effectiveFee: pp.addonFeeOverride ?? global?.defaultAddonFee ?? 0,
+        }
+      })
+      setPlacements(resolved)
     } catch (error) {
       console.error('Error loading placements:', error)
       setPlacements([])
@@ -1847,7 +1870,7 @@ function App() {
     const highlightPrice = stats.textSectionsWithHighlights * PRICING_DATA.pricePerHighlight
     const placementFees = placements
       .filter(p => selectedPlacements.includes(p.id))
-      .reduce((sum, p) => sum + (p.addonFee || 0), 0)
+      .reduce((sum, p) => sum + (p.effectiveFee || 0), 0)
 
     const subtotal = wordPrice + linePrice + imagePrice + decorationPrice + highlightPrice + productPrice + placementFees
 
@@ -2914,9 +2937,9 @@ function App() {
                                     — {placement.description}
                                   </Typography>
                                 )}
-                                {placement.addonFee > 0 && (
+                                {placement.effectiveFee > 0 && (
                                   <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
-                                    (+${placement.addonFee.toFixed(2)})
+                                    (+${placement.effectiveFee.toFixed(2)})
                                   </Typography>
                                 )}
                               </Typography>

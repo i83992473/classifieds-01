@@ -242,10 +242,9 @@ export const getPlacement = /* GraphQL */ `
   query GetPlacement($id: ID!) {
     getPlacement(id: $id) {
       id
-      productId
       name
       description
-      addonFee
+      defaultAddonFee
       isArchived
       createdAt
       updatedAt
@@ -258,10 +257,41 @@ export const listPlacements = /* GraphQL */ `
     listPlacements(filter: $filter, limit: $limit, nextToken: $nextToken) {
       items {
         id
-        productId
         name
         description
-        addonFee
+        defaultAddonFee
+        isArchived
+        createdAt
+        updatedAt
+        __typename
+      }
+      nextToken
+      __typename
+    }
+  }
+`;
+export const getProductPlacement = /* GraphQL */ `
+  query GetProductPlacement($id: ID!) {
+    getProductPlacement(id: $id) {
+      id
+      productId
+      placementId
+      addonFeeOverride
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+  }
+`;
+export const listProductPlacements = /* GraphQL */ `
+  query ListProductPlacements($filter: ModelProductPlacementFilterInput, $limit: Int, $nextToken: String) {
+    listProductPlacements(filter: $filter, limit: $limit, nextToken: $nextToken) {
+      items {
+        id
+        productId
+        placementId
+        addonFeeOverride
         isArchived
         createdAt
         updatedAt

@@ -197,10 +197,9 @@ const listPlacementsQuery = /* GraphQL */ `
     listPlacements(filter: $filter) {
       items {
         id
-        productId
         name
         description
-        addonFee
+        defaultAddonFee
         isArchived
       }
     }
@@ -211,10 +210,9 @@ const createPlacementMutation = /* GraphQL */ `
   mutation CreatePlacement($input: CreatePlacementInput!) {
     createPlacement(input: $input) {
       id
-      productId
       name
       description
-      addonFee
+      defaultAddonFee
       isArchived
     }
   }
@@ -224,10 +222,9 @@ const updatePlacementMutation = /* GraphQL */ `
   mutation UpdatePlacement($input: UpdatePlacementInput!) {
     updatePlacement(input: $input) {
       id
-      productId
       name
       description
-      addonFee
+      defaultAddonFee
       isArchived
     }
   }
@@ -236,6 +233,52 @@ const updatePlacementMutation = /* GraphQL */ `
 const deletePlacementMutation = /* GraphQL */ `
   mutation DeletePlacement($input: DeletePlacementInput!) {
     deletePlacement(input: $input) {
+      id
+    }
+  }
+`
+
+const listProductPlacementsQuery = /* GraphQL */ `
+  query ListProductPlacements($filter: ModelProductPlacementFilterInput) {
+    listProductPlacements(filter: $filter) {
+      items {
+        id
+        productId
+        placementId
+        addonFeeOverride
+        isArchived
+      }
+    }
+  }
+`
+
+const createProductPlacementMutation = /* GraphQL */ `
+  mutation CreateProductPlacement($input: CreateProductPlacementInput!) {
+    createProductPlacement(input: $input) {
+      id
+      productId
+      placementId
+      addonFeeOverride
+      isArchived
+    }
+  }
+`
+
+const updateProductPlacementMutation = /* GraphQL */ `
+  mutation UpdateProductPlacement($input: UpdateProductPlacementInput!) {
+    updateProductPlacement(input: $input) {
+      id
+      productId
+      placementId
+      addonFeeOverride
+      isArchived
+    }
+  }
+`
+
+const deleteProductPlacementMutation = /* GraphQL */ `
+  mutation DeleteProductPlacement($input: DeleteProductPlacementInput!) {
+    deleteProductPlacement(input: $input) {
       id
     }
   }
@@ -336,10 +379,17 @@ interface PricingSetting {
 
 interface Placement {
   id: string
-  productId: string
   name: string
   description?: string
-  addonFee: number
+  defaultAddonFee: number
+  isArchived: boolean
+}
+
+interface ProductPlacement {
+  id: string
+  productId: string
+  placementId: string
+  addonFeeOverride?: number
   isArchived: boolean
 }
 
@@ -463,10 +513,13 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
 
   // Placement state
   const [placements, setPlacements] = useState<Placement[]>([])
+  const [productPlacements, setProductPlacements] = useState<ProductPlacement[]>([])
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null)
-  const [placementForm, setPlacementForm] = useState({ name: '', description: '', addonFee: 0 })
+  const [placementForm, setPlacementForm] = useState({ name: '', description: '', defaultAddonFee: 0 })
   const [editingPlacement, setEditingPlacement] = useState<Placement | null>(null)
-  const [addingPlacementForProductId, setAddingPlacementForProductId] = useState<string | null>(null)
+  const [addingGlobalPlacement, setAddingGlobalPlacement] = useState(false)
+  const [addingPlacementToProductId, setAddingPlacementToProductId] = useState<string | null>(null)
+  const [addPlacementToProductForm, setAddPlacementToProductForm] = useState({ placementId: '', addonFeeOverride: '' })
   
   // User menu and account states
   const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null)
@@ -495,7 +548,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
   useEffect(() => {
     if (activeTab === 0) loadAds(adIdSearch || initialAdFilter)
     else if (activeTab === 1) loadUsers()
-    else if (activeTab === 2) loadProducts()
+    else if (activeTab === 2) { loadProducts(); loadAllPlacements() }
     else if (activeTab === 3) loadPricingSettings()
   }, [activeTab, initialAdFilter, adIdSearch])
 
@@ -1787,34 +1840,44 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
     }
   }
 
-  const loadPlacements = async (productId: string) => {
+  const loadAllPlacements = async () => {
     try {
       const result = await client.graphql({
         query: listPlacementsQuery,
-        variables: { filter: { productId: { eq: productId } } },
         authMode: 'userPool'
       }) as { data: { listPlacements: { items: Placement[] } } }
-      setPlacements(prev => {
-        const others = prev.filter(p => p.productId !== productId)
-        return [...others, ...result.data.listPlacements.items]
-      })
+      setPlacements(result.data.listPlacements.items || [])
     } catch (error) {
       console.error('Error loading placements:', error)
+    }
+  }
+
+  const loadProductPlacements = async (productId: string) => {
+    try {
+      const result = await client.graphql({
+        query: listProductPlacementsQuery,
+        variables: { filter: { productId: { eq: productId } } },
+        authMode: 'userPool'
+      }) as { data: { listProductPlacements: { items: ProductPlacement[] } } }
+      setProductPlacements(result.data.listProductPlacements.items || [])
+    } catch (error) {
+      console.error('Error loading product placements:', error)
     }
   }
 
   const handleToggleProductExpand = (productId: string) => {
     if (expandedProductId === productId) {
       setExpandedProductId(null)
+      setProductPlacements([])
     } else {
       setExpandedProductId(productId)
-      loadPlacements(productId)
-      setAddingPlacementForProductId(null)
-      setEditingPlacement(null)
+      loadProductPlacements(productId)
+      setAddingPlacementToProductId(null)
+      setAddPlacementToProductForm({ placementId: '', addonFeeOverride: '' })
     }
   }
 
-  const handleSavePlacement = async (productId: string) => {
+  const handleSavePlacement = async () => {
     try {
       if (editingPlacement) {
         await client.graphql({
@@ -1824,7 +1887,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
               id: editingPlacement.id,
               name: placementForm.name,
               description: placementForm.description || undefined,
-              addonFee: placementForm.addonFee,
+              defaultAddonFee: placementForm.defaultAddonFee,
             }
           },
           authMode: 'userPool'
@@ -1835,10 +1898,9 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
           query: createPlacementMutation,
           variables: {
             input: {
-              productId,
               name: placementForm.name,
               description: placementForm.description || undefined,
-              addonFee: placementForm.addonFee,
+              defaultAddonFee: placementForm.defaultAddonFee,
               isArchived: false,
             }
           },
@@ -1847,9 +1909,9 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
         setSnackbar({ open: true, message: 'Placement created', severity: 'success' })
       }
       setEditingPlacement(null)
-      setAddingPlacementForProductId(null)
-      setPlacementForm({ name: '', description: '', addonFee: 0 })
-      loadPlacements(productId)
+      setAddingGlobalPlacement(false)
+      setPlacementForm({ name: '', description: '', defaultAddonFee: 0 })
+      loadAllPlacements()
     } catch (error) {
       console.error('Error saving placement:', error)
       setSnackbar({ open: true, message: 'Failed to save placement', severity: 'error' })
@@ -1865,7 +1927,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
         authMode: 'userPool'
       })
       setSnackbar({ open: true, message: 'Placement deleted', severity: 'success' })
-      loadPlacements(placement.productId)
+      loadAllPlacements()
     } catch (error) {
       console.error('Error deleting placement:', error)
       setSnackbar({ open: true, message: 'Failed to delete placement', severity: 'error' })
@@ -1880,10 +1942,69 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
         authMode: 'userPool'
       })
       setSnackbar({ open: true, message: placement.isArchived ? 'Placement restored' : 'Placement archived', severity: 'success' })
-      loadPlacements(placement.productId)
+      loadAllPlacements()
     } catch (error) {
       console.error('Error archiving placement:', error)
       setSnackbar({ open: true, message: 'Failed to update placement', severity: 'error' })
+    }
+  }
+
+  const handleAddPlacementToProduct = async (productId: string) => {
+    if (!addPlacementToProductForm.placementId) return
+    try {
+      const override = addPlacementToProductForm.addonFeeOverride !== ''
+        ? parseFloat(addPlacementToProductForm.addonFeeOverride)
+        : undefined
+      await client.graphql({
+        query: createProductPlacementMutation,
+        variables: {
+          input: {
+            productId,
+            placementId: addPlacementToProductForm.placementId,
+            addonFeeOverride: override,
+            isArchived: false,
+          }
+        },
+        authMode: 'userPool'
+      })
+      setSnackbar({ open: true, message: 'Placement added to product', severity: 'success' })
+      setAddingPlacementToProductId(null)
+      setAddPlacementToProductForm({ placementId: '', addonFeeOverride: '' })
+      loadProductPlacements(productId)
+    } catch (error) {
+      console.error('Error adding placement to product:', error)
+      setSnackbar({ open: true, message: 'Failed to add placement', severity: 'error' })
+    }
+  }
+
+  const handleRemoveProductPlacement = async (pp: ProductPlacement) => {
+    if (!confirm('Remove this placement from the product?')) return
+    try {
+      await client.graphql({
+        query: deleteProductPlacementMutation,
+        variables: { input: { id: pp.id } },
+        authMode: 'userPool'
+      })
+      setSnackbar({ open: true, message: 'Placement removed', severity: 'success' })
+      loadProductPlacements(pp.productId)
+    } catch (error) {
+      console.error('Error removing product placement:', error)
+      setSnackbar({ open: true, message: 'Failed to remove placement', severity: 'error' })
+    }
+  }
+
+  const handleUpdateProductPlacementFee = async (pp: ProductPlacement, feeStr: string) => {
+    try {
+      const override = feeStr !== '' ? parseFloat(feeStr) : null
+      await client.graphql({
+        query: updateProductPlacementMutation,
+        variables: { input: { id: pp.id, addonFeeOverride: override } },
+        authMode: 'userPool'
+      })
+      loadProductPlacements(pp.productId)
+    } catch (error) {
+      console.error('Error updating fee override:', error)
+      setSnackbar({ open: true, message: 'Failed to update fee override', severity: 'error' })
     }
   }
 
@@ -2453,212 +2574,351 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
 
             {/* Products Tab */}
             {activeTab === 2 && (
-              <Paper>
-                <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
-                  <Tooltip title="Add new product. Creates a new ad product with configurable width and base price.">
-                    <Button variant="contained" onClick={() => { setEditingProduct(null); setProductForm({ name: '', widthInches: 3, basePrice: 25 }); setProductDialogOpen(true) }}>
-                      Add Product
+              <>
+                {/* Placements Library */}
+                <Paper sx={{ mb: 2 }}>
+                  <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="subtitle1" fontWeight={600}>Placements Library</Typography>
+                    <Button
+                      size="small"
+                      variant="contained"
+                      startIcon={<AddIcon />}
+                      onClick={() => {
+                        setEditingPlacement(null)
+                        setPlacementForm({ name: '', description: '', defaultAddonFee: 0 })
+                        setAddingGlobalPlacement(true)
+                      }}
+                    >
+                      Add Placement
                     </Button>
-                  </Tooltip>
-                </Box>
-                <Table>
-                  <TableHead>
-                    <TableRow>
-                      <TableCell sx={{ width: 40 }} />
-                      <TableCell>Name</TableCell>
-                      <TableCell>Width (inches)</TableCell>
-                      <TableCell>Base Price</TableCell>
-                      <TableCell>Status</TableCell>
-                      <TableCell align="right">Actions</TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {products.length === 0 ? (
+                  </Box>
+
+                  {/* Inline add/edit form for global placement */}
+                  {(addingGlobalPlacement || editingPlacement) && (
+                    <Box sx={{ px: 2, pt: 2 }}>
+                      <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+                        <Stack spacing={1.5}>
+                          <TextField
+                            size="small"
+                            label="Name"
+                            value={placementForm.name}
+                            onChange={e => setPlacementForm(f => ({ ...f, name: e.target.value }))}
+                            required
+                          />
+                          <TextField
+                            size="small"
+                            label="Description (optional)"
+                            value={placementForm.description}
+                            onChange={e => setPlacementForm(f => ({ ...f, description: e.target.value }))}
+                          />
+                          <TextField
+                            size="small"
+                            label="Default Addon Fee ($)"
+                            type="number"
+                            value={placementForm.defaultAddonFee}
+                            onChange={e => setPlacementForm(f => ({ ...f, defaultAddonFee: parseFloat(e.target.value) || 0 }))}
+                            InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+                          />
+                          <Stack direction="row" spacing={1}>
+                            <Button
+                              size="small"
+                              variant="contained"
+                              disabled={!placementForm.name.trim()}
+                              onClick={handleSavePlacement}
+                            >
+                              {editingPlacement ? 'Update' : 'Create'}
+                            </Button>
+                            <Button
+                              size="small"
+                              onClick={() => {
+                                setAddingGlobalPlacement(false)
+                                setEditingPlacement(null)
+                                setPlacementForm({ name: '', description: '', defaultAddonFee: 0 })
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                          </Stack>
+                        </Stack>
+                      </Paper>
+                    </Box>
+                  )}
+
+                  <Table size="small">
+                    <TableHead>
                       <TableRow>
-                        <TableCell colSpan={6} align="center">No products configured</TableCell>
+                        <TableCell>Name</TableCell>
+                        <TableCell>Description</TableCell>
+                        <TableCell>Default Fee</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell align="right">Actions</TableCell>
                       </TableRow>
-                    ) : (
-                      products.map(product => {
-                        const isExpanded = expandedProductId === product.id
-                        const productPlacements = placements.filter(p => p.productId === product.id)
-                        return (
-                          <>
-                            <TableRow key={product.id} sx={{ opacity: product.isArchived ? 0.5 : 1 }}>
-                              <TableCell sx={{ width: 40, p: 0.5 }}>
-                                <IconButton size="small" onClick={() => handleToggleProductExpand(product.id)}>
-                                  {isExpanded ? <ExpandMoreIcon fontSize="small" /> : <ChevronRightIcon fontSize="small" />}
-                                </IconButton>
-                              </TableCell>
-                              <TableCell>{product.name || '-'}</TableCell>
-                              <TableCell>{product.widthInches || 0}"</TableCell>
-                              <TableCell>${(product.basePrice || 0).toFixed(2)}</TableCell>
-                              <TableCell>
-                                {product.isArchived ? <Chip size="small" label="Archived" /> : <Chip size="small" label="Active" color="success" />}
-                              </TableCell>
-                              <TableCell align="right">
-                                <Stack direction="row" spacing={1} justifyContent="flex-end">
-                                  <Tooltip title="Edit product">
-                                    <IconButton size="small" onClick={() => {
-                                      setEditingProduct(product);
-                                      setProductForm({
-                                        name: product.name || '',
-                                        widthInches: product.widthInches || 3,
-                                        basePrice: product.basePrice || 0
-                                      });
-                                      setProductDialogOpen(true);
-                                    }}>
-                                      <EditIcon />
-                                    </IconButton>
-                                  </Tooltip>
-                                  <Tooltip title={product.isArchived ? "Restore product" : "Archive product"}>
-                                    <IconButton size="small" onClick={() => handleArchiveProduct(product)}>
-                                      <ArchiveIcon />
-                                    </IconButton>
-                                  </Tooltip>
-                                  <Tooltip title="Delete product permanently">
-                                    <IconButton size="small" color="error" onClick={() => handleDeleteProduct(product)}>
-                                      <DeleteIcon />
-                                    </IconButton>
-                                  </Tooltip>
-                                </Stack>
-                              </TableCell>
-                            </TableRow>
-                            <TableRow key={`${product.id}-placements`}>
-                              <TableCell colSpan={6} sx={{ p: 0, borderBottom: isExpanded ? undefined : 'none' }}>
-                                <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                                  <Box sx={{ bgcolor: 'grey.50', px: 4, py: 2 }}>
-                                    <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
-                                      <Typography variant="subtitle2" fontWeight={600}>Placements</Typography>
-                                      <Button
-                                        size="small"
-                                        startIcon={<AddIcon />}
-                                        onClick={() => {
-                                          setEditingPlacement(null)
-                                          setPlacementForm({ name: '', description: '', addonFee: 0 })
-                                          setAddingPlacementForProductId(product.id)
-                                        }}
-                                      >
-                                        Add Placement
-                                      </Button>
-                                    </Stack>
+                    </TableHead>
+                    <TableBody>
+                      {placements.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} align="center">No placements in library</TableCell>
+                        </TableRow>
+                      ) : (
+                        placements.map(placement => (
+                          <TableRow key={placement.id} sx={{ opacity: placement.isArchived ? 0.5 : 1 }}>
+                            <TableCell>{placement.name}</TableCell>
+                            <TableCell>{placement.description || '-'}</TableCell>
+                            <TableCell>${(placement.defaultAddonFee || 0).toFixed(2)}</TableCell>
+                            <TableCell>
+                              {placement.isArchived
+                                ? <Chip size="small" label="Archived" />
+                                : <Chip size="small" label="Active" color="success" />}
+                            </TableCell>
+                            <TableCell align="right">
+                              <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                                <Tooltip title="Edit">
+                                  <IconButton size="small" onClick={() => {
+                                    setEditingPlacement(placement)
+                                    setPlacementForm({
+                                      name: placement.name,
+                                      description: placement.description || '',
+                                      defaultAddonFee: placement.defaultAddonFee,
+                                    })
+                                    setAddingGlobalPlacement(false)
+                                  }}>
+                                    <EditIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title={placement.isArchived ? 'Restore' : 'Archive'}>
+                                  <IconButton size="small" onClick={() => handleArchivePlacement(placement)}>
+                                    <ArchiveIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Delete permanently">
+                                  <IconButton size="small" color="error" onClick={() => handleDeletePlacement(placement)}>
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              </Stack>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </Paper>
 
-                                    {/* Inline add/edit form */}
-                                    {(addingPlacementForProductId === product.id || (editingPlacement && editingPlacement.productId === product.id)) && (
-                                      <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
-                                        <Stack spacing={1.5}>
-                                          <TextField
+                {/* Products */}
+                <Paper>
+                  <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
+                    <Tooltip title="Add new product. Creates a new ad product with configurable width and base price.">
+                      <Button variant="contained" onClick={() => { setEditingProduct(null); setProductForm({ name: '', widthInches: 3, basePrice: 25 }); setProductDialogOpen(true) }}>
+                        Add Product
+                      </Button>
+                    </Tooltip>
+                  </Box>
+                  <Table>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ width: 40 }} />
+                        <TableCell>Name</TableCell>
+                        <TableCell>Width (inches)</TableCell>
+                        <TableCell>Base Price</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell align="right">Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {products.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} align="center">No products configured</TableCell>
+                        </TableRow>
+                      ) : (
+                        products.map(product => {
+                          const isExpanded = expandedProductId === product.id
+                          // Placements assigned to this product (only when expanded)
+                          const assignedPlacements = isExpanded ? productPlacements : []
+                          // Placement IDs already assigned (for filtering the add dropdown)
+                          const assignedPlacementIds = assignedPlacements.map(pp => pp.placementId)
+                          const availableToAdd = placements.filter(p => !p.isArchived && !assignedPlacementIds.includes(p.id))
+                          return (
+                            <>
+                              <TableRow key={product.id} sx={{ opacity: product.isArchived ? 0.5 : 1 }}>
+                                <TableCell sx={{ width: 40, p: 0.5 }}>
+                                  <IconButton size="small" onClick={() => handleToggleProductExpand(product.id)}>
+                                    {isExpanded ? <ExpandMoreIcon fontSize="small" /> : <ChevronRightIcon fontSize="small" />}
+                                  </IconButton>
+                                </TableCell>
+                                <TableCell>{product.name || '-'}</TableCell>
+                                <TableCell>{product.widthInches || 0}"</TableCell>
+                                <TableCell>${(product.basePrice || 0).toFixed(2)}</TableCell>
+                                <TableCell>
+                                  {product.isArchived ? <Chip size="small" label="Archived" /> : <Chip size="small" label="Active" color="success" />}
+                                </TableCell>
+                                <TableCell align="right">
+                                  <Stack direction="row" spacing={1} justifyContent="flex-end">
+                                    <Tooltip title="Edit product">
+                                      <IconButton size="small" onClick={() => {
+                                        setEditingProduct(product);
+                                        setProductForm({
+                                          name: product.name || '',
+                                          widthInches: product.widthInches || 3,
+                                          basePrice: product.basePrice || 0
+                                        });
+                                        setProductDialogOpen(true);
+                                      }}>
+                                        <EditIcon />
+                                      </IconButton>
+                                    </Tooltip>
+                                    <Tooltip title={product.isArchived ? "Restore product" : "Archive product"}>
+                                      <IconButton size="small" onClick={() => handleArchiveProduct(product)}>
+                                        <ArchiveIcon />
+                                      </IconButton>
+                                    </Tooltip>
+                                    <Tooltip title="Delete product permanently">
+                                      <IconButton size="small" color="error" onClick={() => handleDeleteProduct(product)}>
+                                        <DeleteIcon />
+                                      </IconButton>
+                                    </Tooltip>
+                                  </Stack>
+                                </TableCell>
+                              </TableRow>
+                              <TableRow key={`${product.id}-placements`}>
+                                <TableCell colSpan={6} sx={{ p: 0, borderBottom: isExpanded ? undefined : 'none' }}>
+                                  <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                                    <Box sx={{ bgcolor: 'grey.50', px: 4, py: 2 }}>
+                                      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
+                                        <Typography variant="subtitle2" fontWeight={600}>Placements for this product</Typography>
+                                        {addingPlacementToProductId !== product.id && (
+                                          <Button
                                             size="small"
-                                            label="Name"
-                                            value={placementForm.name}
-                                            onChange={e => setPlacementForm(f => ({ ...f, name: e.target.value }))}
-                                            required
-                                          />
-                                          <TextField
-                                            size="small"
-                                            label="Description (optional)"
-                                            value={placementForm.description}
-                                            onChange={e => setPlacementForm(f => ({ ...f, description: e.target.value }))}
-                                          />
-                                          <TextField
-                                            size="small"
-                                            label="Addon Fee ($)"
-                                            type="number"
-                                            value={placementForm.addonFee}
-                                            onChange={e => setPlacementForm(f => ({ ...f, addonFee: parseFloat(e.target.value) || 0 }))}
-                                            InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
-                                          />
-                                          <Stack direction="row" spacing={1}>
-                                            <Button
+                                            startIcon={<AddIcon />}
+                                            disabled={availableToAdd.length === 0}
+                                            onClick={() => {
+                                              setAddingPlacementToProductId(product.id)
+                                              setAddPlacementToProductForm({ placementId: '', addonFeeOverride: '' })
+                                            }}
+                                          >
+                                            Add Placement to Product
+                                          </Button>
+                                        )}
+                                      </Stack>
+
+                                      {/* Add placement to product form */}
+                                      {addingPlacementToProductId === product.id && (
+                                        <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
+                                          <Stack spacing={1.5}>
+                                            <FormControl size="small" fullWidth>
+                                              <InputLabel>Select Placement</InputLabel>
+                                              <Select
+                                                value={addPlacementToProductForm.placementId}
+                                                label="Select Placement"
+                                                onChange={e => setAddPlacementToProductForm(f => ({ ...f, placementId: e.target.value }))}
+                                              >
+                                                {availableToAdd.map(p => (
+                                                  <MenuItem key={p.id} value={p.id}>
+                                                    {p.name} (default ${(p.defaultAddonFee || 0).toFixed(2)})
+                                                  </MenuItem>
+                                                ))}
+                                              </Select>
+                                            </FormControl>
+                                            <TextField
                                               size="small"
-                                              variant="contained"
-                                              disabled={!placementForm.name.trim()}
-                                              onClick={() => handleSavePlacement(product.id)}
-                                            >
-                                              {editingPlacement ? 'Update' : 'Create'}
-                                            </Button>
-                                            <Button
-                                              size="small"
-                                              onClick={() => {
-                                                setAddingPlacementForProductId(null)
-                                                setEditingPlacement(null)
-                                                setPlacementForm({ name: '', description: '', addonFee: 0 })
-                                              }}
-                                            >
-                                              Cancel
-                                            </Button>
+                                              label="Fee Override (leave blank to use default)"
+                                              type="number"
+                                              value={addPlacementToProductForm.addonFeeOverride}
+                                              onChange={e => setAddPlacementToProductForm(f => ({ ...f, addonFeeOverride: e.target.value }))}
+                                              InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+                                            />
+                                            <Stack direction="row" spacing={1}>
+                                              <Button
+                                                size="small"
+                                                variant="contained"
+                                                disabled={!addPlacementToProductForm.placementId}
+                                                onClick={() => handleAddPlacementToProduct(product.id)}
+                                              >
+                                                Add
+                                              </Button>
+                                              <Button
+                                                size="small"
+                                                onClick={() => {
+                                                  setAddingPlacementToProductId(null)
+                                                  setAddPlacementToProductForm({ placementId: '', addonFeeOverride: '' })
+                                                }}
+                                              >
+                                                Cancel
+                                              </Button>
+                                            </Stack>
                                           </Stack>
-                                        </Stack>
-                                      </Paper>
-                                    )}
+                                        </Paper>
+                                      )}
 
-                                    {/* Placements sub-table */}
-                                    {productPlacements.length === 0 ? (
-                                      <Typography variant="body2" color="text.secondary">No placements yet</Typography>
-                                    ) : (
-                                      <Table size="small">
-                                        <TableHead>
-                                          <TableRow>
-                                            <TableCell>Name</TableCell>
-                                            <TableCell>Description</TableCell>
-                                            <TableCell>Addon Fee</TableCell>
-                                            <TableCell>Status</TableCell>
-                                            <TableCell align="right">Actions</TableCell>
-                                          </TableRow>
-                                        </TableHead>
-                                        <TableBody>
-                                          {productPlacements.map(placement => (
-                                            <TableRow key={placement.id} sx={{ opacity: placement.isArchived ? 0.5 : 1 }}>
-                                              <TableCell>{placement.name}</TableCell>
-                                              <TableCell>{placement.description || '-'}</TableCell>
-                                              <TableCell>${(placement.addonFee || 0).toFixed(2)}</TableCell>
-                                              <TableCell>
-                                                {placement.isArchived
-                                                  ? <Chip size="small" label="Archived" />
-                                                  : <Chip size="small" label="Active" color="success" />}
-                                              </TableCell>
-                                              <TableCell align="right">
-                                                <Stack direction="row" spacing={0.5} justifyContent="flex-end">
-                                                  <Tooltip title="Edit">
-                                                    <IconButton size="small" onClick={() => {
-                                                      setEditingPlacement(placement)
-                                                      setPlacementForm({
-                                                        name: placement.name,
-                                                        description: placement.description || '',
-                                                        addonFee: placement.addonFee,
-                                                      })
-                                                      setAddingPlacementForProductId(null)
-                                                    }}>
-                                                      <EditIcon fontSize="small" />
-                                                    </IconButton>
-                                                  </Tooltip>
-                                                  <Tooltip title={placement.isArchived ? 'Restore' : 'Archive'}>
-                                                    <IconButton size="small" onClick={() => handleArchivePlacement(placement)}>
-                                                      <ArchiveIcon fontSize="small" />
-                                                    </IconButton>
-                                                  </Tooltip>
-                                                  <Tooltip title="Delete permanently">
-                                                    <IconButton size="small" color="error" onClick={() => handleDeletePlacement(placement)}>
-                                                      <DeleteIcon fontSize="small" />
-                                                    </IconButton>
-                                                  </Tooltip>
-                                                </Stack>
-                                              </TableCell>
+                                      {/* ProductPlacements sub-table */}
+                                      {assignedPlacements.length === 0 ? (
+                                        <Typography variant="body2" color="text.secondary">No placements assigned to this product</Typography>
+                                      ) : (
+                                        <Table size="small">
+                                          <TableHead>
+                                            <TableRow>
+                                              <TableCell>Name</TableCell>
+                                              <TableCell>Default Fee</TableCell>
+                                              <TableCell>Override</TableCell>
+                                              <TableCell>Effective Fee</TableCell>
+                                              <TableCell>Status</TableCell>
+                                              <TableCell align="right">Actions</TableCell>
                                             </TableRow>
-                                          ))}
-                                        </TableBody>
-                                      </Table>
-                                    )}
-                                  </Box>
-                                </Collapse>
-                              </TableCell>
-                            </TableRow>
-                          </>
-                        )
-                      })
-                    )}
-                  </TableBody>
-                </Table>
-              </Paper>
+                                          </TableHead>
+                                          <TableBody>
+                                            {assignedPlacements.map(pp => {
+                                              const globalPlacement = placements.find(p => p.id === pp.placementId)
+                                              const defaultFee = globalPlacement?.defaultAddonFee ?? 0
+                                              const effectiveFee = pp.addonFeeOverride ?? defaultFee
+                                              return (
+                                                <TableRow key={pp.id} sx={{ opacity: pp.isArchived ? 0.5 : 1 }}>
+                                                  <TableCell>{globalPlacement?.name || pp.placementId}</TableCell>
+                                                  <TableCell>${defaultFee.toFixed(2)}</TableCell>
+                                                  <TableCell>
+                                                    <TextField
+                                                      size="small"
+                                                      type="number"
+                                                      placeholder="(default)"
+                                                      value={pp.addonFeeOverride !== undefined && pp.addonFeeOverride !== null ? pp.addonFeeOverride : ''}
+                                                      onChange={e => {
+                                                        const updated = productPlacements.map(x => x.id === pp.id ? { ...x, addonFeeOverride: e.target.value === '' ? undefined : parseFloat(e.target.value) } : x)
+                                                        setProductPlacements(updated)
+                                                      }}
+                                                      onBlur={e => handleUpdateProductPlacementFee(pp, e.target.value)}
+                                                      sx={{ width: 90 }}
+                                                      InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+                                                    />
+                                                  </TableCell>
+                                                  <TableCell>${effectiveFee.toFixed(2)}</TableCell>
+                                                  <TableCell>
+                                                    {pp.isArchived
+                                                      ? <Chip size="small" label="Archived" />
+                                                      : <Chip size="small" label="Active" color="success" />}
+                                                  </TableCell>
+                                                  <TableCell align="right">
+                                                    <Tooltip title="Remove from product">
+                                                      <IconButton size="small" color="error" onClick={() => handleRemoveProductPlacement(pp)}>
+                                                        <DeleteIcon fontSize="small" />
+                                                      </IconButton>
+                                                    </Tooltip>
+                                                  </TableCell>
+                                                </TableRow>
+                                              )
+                                            })}
+                                          </TableBody>
+                                        </Table>
+                                      )}
+                                    </Box>
+                                  </Collapse>
+                                </TableCell>
+                              </TableRow>
+                            </>
+                          )
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </Paper>
+              </>
             )}
 
             {/* Pricing Tab */}
