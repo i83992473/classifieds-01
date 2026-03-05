@@ -49,6 +49,7 @@ import FormatAlignCenterIcon from '@mui/icons-material/FormatAlignCenter'
 import FormatAlignRightIcon from '@mui/icons-material/FormatAlignRight'
 import { useTheme } from '@mui/material/styles'
 import DeleteIcon from '@mui/icons-material/Delete'
+import CloseIcon from '@mui/icons-material/Close'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
@@ -98,6 +99,25 @@ const createUserRecordMutation = /* GraphQL */ `
       isBlocked
       createdAt
       updatedAt
+    }
+  }
+`
+
+const listActiveDiscountsQuery = /* GraphQL */ `
+  query ListActiveDiscounts {
+    listDiscounts(filter: { isActive: { eq: true } }) {
+      items {
+        id
+        name
+        description
+        code
+        discountType
+        value
+        isActive
+        startDate
+        endDate
+        conditions
+      }
     }
   }
 `
@@ -197,6 +217,7 @@ interface Ad {
   placementIds?: string[];
   sectionIds?: string[];
   subSectionIds?: string[];
+  appliedDiscounts?: string; // JSON snapshot
 }
 
 interface Placement {
@@ -232,6 +253,23 @@ interface ResolvedSubSection {
   name: string;
   effectiveFee: number;
   sortOrder: number;
+}
+
+interface Discount {
+  id: string
+  name: string
+  description?: string
+  code?: string
+  discountType: 'FLAT' | 'PERCENTAGE'
+  value: number
+  isActive: boolean
+  startDate?: string
+  endDate?: string
+  conditions?: string // JSON: { productIds, placementIds, sectionIds, minPlacements }
+}
+
+interface AppliedDiscount extends Discount {
+  isAutomatic: boolean
 }
 
 const SIDEBAR_WIDTH = 320;
@@ -282,6 +320,12 @@ function App() {
   const [selectedSections, setSelectedSections] = useState<string[]>([])
   const [subSections, setSubSections] = useState<ResolvedSubSection[]>([])
   const [selectedSubSections, setSelectedSubSections] = useState<string[]>([])
+
+  // Discount state
+  const [allDiscounts, setAllDiscounts] = useState<Discount[]>([])
+  const [appliedDiscounts, setAppliedDiscounts] = useState<AppliedDiscount[]>([])
+  const [couponInput, setCouponInput] = useState('')
+  const [couponError, setCouponError] = useState('')
 
   // Admin and messaging state
   const [showAdminDashboard, setShowAdminDashboard] = useState(false)
@@ -394,9 +438,12 @@ function App() {
     
     // Ensure User record exists in database
     await ensureUserRecord(userId, email || '')
-    
+
     // Load saved card after user record is ensured
     await loadSavedCard()
+
+    // Load active discounts for use in ad creation
+    await loadDiscounts()
     
     // Check admin status: must be in both Cognito Admin group AND have isAdmin=true in database
     // Try multiple ways to get Cognito groups from the token
@@ -675,6 +722,68 @@ function App() {
     }
   }, [products.length, currentAdId]) // Only depend on products.length and currentAdId to avoid loops
   
+  const loadDiscounts = async () => {
+    try {
+      const result = await client.graphql({
+        query: listActiveDiscountsQuery,
+        authMode: 'userPool'
+      }) as { data: { listDiscounts: { items: Discount[] } } }
+      setAllDiscounts(result.data.listDiscounts.items || [])
+    } catch (error) {
+      console.error('Error loading discounts:', error)
+    }
+  }
+
+  // Re-evaluate automatic discounts whenever selections change
+  useEffect(() => {
+    if (allDiscounts.length === 0) return
+    const today = new Date().toISOString().split('T')[0]
+    const autoEligible = allDiscounts.filter(d => {
+      if (d.code) return false // coupon codes must be entered manually
+      if (d.startDate && d.startDate > today) return false
+      if (d.endDate && d.endDate < today) return false
+      const conds = d.conditions ? JSON.parse(d.conditions) : {}
+      const { productIds = [], placementIds = [], sectionIds = [], minPlacements = 0 } = conds
+      if (productIds.length > 0 && !productIds.includes(selectedProduct)) return false
+      if (placementIds.length > 0 && !selectedPlacements.some((id: string) => placementIds.includes(id))) return false
+      if (sectionIds.length > 0 && !selectedSections.some((id: string) => sectionIds.includes(id))) return false
+      if (minPlacements > 0 && selectedPlacements.length < minPlacements) return false
+      return true
+    })
+    setAppliedDiscounts(prev => {
+      const coupons = prev.filter(d => !d.isAutomatic)
+      const newAuto = autoEligible.map(d => ({ ...d, isAutomatic: true }))
+      return [...newAuto, ...coupons]
+    })
+  }, [allDiscounts, selectedProduct, selectedPlacements, selectedSections])
+
+  const applyCoupon = () => {
+    const code = couponInput.trim().toUpperCase()
+    if (!code) return
+    const today = new Date().toISOString().split('T')[0]
+    const discount = allDiscounts.find(d =>
+      d.code?.toUpperCase() === code &&
+      d.isActive &&
+      (!d.startDate || d.startDate <= today) &&
+      (!d.endDate || d.endDate >= today)
+    )
+    if (!discount) {
+      setCouponError('Invalid or expired coupon code')
+      return
+    }
+    if (appliedDiscounts.some(d => d.id === discount.id)) {
+      setCouponError('This coupon is already applied')
+      return
+    }
+    setAppliedDiscounts(prev => [...prev, { ...discount, isAutomatic: false }])
+    setCouponInput('')
+    setCouponError('')
+  }
+
+  const removeDiscount = (id: string) => {
+    setAppliedDiscounts(prev => prev.filter(d => d.id !== id))
+  }
+
   // Load saved card info
   const loadSavedCard = async () => {
     if (!user?.userId) return
@@ -1121,8 +1230,18 @@ function App() {
       const selectedProductData = products.find(p => p.id === selectedProduct)
       const productName = selectedProductData?.name || null
       const pricing = calculatePricing()
-      const totalPrice = pricing.subtotal
-      
+      const totalPrice = pricing.finalTotal
+
+      // Snapshot applied discounts at save time
+      const discountSnapshot = pricing.discountDetails.map(d => ({
+        id: d.id,
+        name: d.name,
+        code: d.code || null,
+        discountType: d.discountType,
+        value: d.value,
+        computedAmount: d.computedAmount,
+      }))
+
       const input = {
         title: adTitle,
         content: adSettings,
@@ -1135,6 +1254,7 @@ function App() {
         placementIds: selectedPlacements.length > 0 ? selectedPlacements : undefined,
         sectionIds: selectedSections.length > 0 ? selectedSections : undefined,
         subSectionIds: selectedSubSections.length > 0 ? selectedSubSections : undefined,
+        appliedDiscounts: discountSnapshot.length > 0 ? JSON.stringify(discountSnapshot) : undefined,
       }
       
       if (currentAdId) {
@@ -1195,7 +1315,7 @@ function App() {
 
     // Calculate total price
     const pricing = calculatePricing()
-    const totalPrice = pricing.subtotal
+    const totalPrice = pricing.finalTotal
     if (totalPrice <= 0) {
       setSnackbar({ open: true, message: 'Please add content to your ad', severity: 'error' })
       return
@@ -1995,6 +2115,16 @@ function App() {
 
     const subtotal = wordPrice + linePrice + imagePrice + decorationPrice + highlightPrice + productPrice + placementFees + sectionFees + subSectionFees
 
+    // Calculate each applied discount against the subtotal
+    const discountDetails = appliedDiscounts.map(d => ({
+      ...d,
+      computedAmount: d.discountType === 'FLAT'
+        ? Math.min(d.value, subtotal)
+        : subtotal * (d.value / 100),
+    }))
+    const totalDiscountAmount = discountDetails.reduce((sum, d) => sum + d.computedAmount, 0)
+    const finalTotal = Math.max(0, subtotal - totalDiscountAmount)
+
     return {
       productPrice,
       wordPrice,
@@ -2006,6 +2136,9 @@ function App() {
       sectionFees,
       subSectionFees,
       subtotal,
+      discountDetails,
+      totalDiscountAmount,
+      finalTotal,
     }
   }
   
@@ -2605,7 +2738,7 @@ function App() {
         open={paymentDialogOpen}
         onClose={() => setPaymentDialogOpen(false)}
         onPaymentSuccess={handlePaymentSuccess}
-        amount={calculatePricing().subtotal}
+        amount={calculatePricing().finalTotal}
         savedCard={savedCard}
         onSaveCard={handleSaveCard}
         onUpdateCard={handleUpdateCard}
@@ -3866,22 +3999,98 @@ function App() {
                             </TableRow>
                           )}
 
+                          {/* Subtotal (only shown when discounts are applied) */}
+                          {pricing.totalDiscountAmount > 0 && (
+                            <TableRow>
+                              <TableCell sx={{ borderTop: 1, borderColor: 'divider' }}>
+                                <Typography variant="body2" fontWeight={600}>Subtotal</Typography>
+                              </TableCell>
+                              <TableCell align="right" sx={{ borderTop: 1, borderColor: 'divider' }}>
+                                <Typography variant="body2" fontWeight={500}>
+                                  ${pricing.subtotal.toFixed(2)}
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          )}
+
+                          {/* Discount rows */}
+                          {pricing.discountDetails.map(d => (
+                            <TableRow key={d.id}>
+                              <TableCell sx={{ borderBottom: 'none', pl: 4 }}>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                  <Typography variant="body2" color="success.main">
+                                    {d.name}
+                                    {d.code && ` (${d.code})`}
+                                    {' — '}
+                                    {d.discountType === 'FLAT' ? `-$${d.value.toFixed(2)}` : `-${d.value}%`}
+                                  </Typography>
+                                  {!d.isAutomatic && (
+                                    <IconButton
+                                      size="small"
+                                      sx={{ p: 0, ml: 0.5 }}
+                                      onClick={() => removeDiscount(d.id)}
+                                    >
+                                      <CloseIcon sx={{ fontSize: 14 }} />
+                                    </IconButton>
+                                  )}
+                                </Box>
+                              </TableCell>
+                              <TableCell align="right" sx={{ borderBottom: 'none' }}>
+                                <Typography variant="body2" color="success.main" fontWeight={500}>
+                                  -${d.computedAmount.toFixed(2)}
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+
                           {/* Total */}
                           <TableRow>
-                            <TableCell sx={{ borderTop: 1, borderColor: 'divider' }}>
+                            <TableCell sx={{ borderTop: pricing.totalDiscountAmount > 0 ? 0 : 1, borderColor: 'divider' }}>
                               <Typography variant="body2" fontWeight={600}>
-                                Total
+                                {pricing.totalDiscountAmount > 0 ? 'Total After Discounts' : 'Total'}
                               </Typography>
                             </TableCell>
-                            <TableCell align="right" sx={{ borderTop: 1, borderColor: 'divider' }}>
+                            <TableCell align="right" sx={{ borderTop: pricing.totalDiscountAmount > 0 ? 0 : 1, borderColor: 'divider' }}>
                               <Typography variant="body2" fontWeight={700} fontSize="1.1rem">
-                                ${pricing.subtotal.toFixed(2)}
+                                ${pricing.finalTotal.toFixed(2)}
                               </Typography>
                             </TableCell>
                           </TableRow>
                         </TableBody>
                       </Table>
                     </Paper>
+                  </Box>
+
+                  {/* Coupon Code */}
+                  <Box>
+                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
+                      Promo Code
+                    </Typography>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      <TextField
+                        size="small"
+                        placeholder="Enter code"
+                        value={couponInput}
+                        onChange={(e) => { setCouponInput(e.target.value.toUpperCase()); setCouponError('') }}
+                        onKeyDown={(e) => e.key === 'Enter' && applyCoupon()}
+                        error={!!couponError}
+                        helperText={couponError}
+                        sx={{ flex: 1 }}
+                        inputProps={{ style: { textTransform: 'uppercase' } }}
+                      />
+                      <Button variant="outlined" size="small" onClick={applyCoupon} sx={{ alignSelf: 'flex-start' }}>
+                        Apply
+                      </Button>
+                    </Box>
+                    {appliedDiscounts.filter(d => d.isAutomatic).length > 0 && (
+                      <Box sx={{ mt: 1 }}>
+                        {appliedDiscounts.filter(d => d.isAutomatic).map(d => (
+                          <Typography key={d.id} variant="caption" color="success.main" display="block">
+                            ✓ {d.name} applied automatically
+                          </Typography>
+                        ))}
+                      </Box>
+                    )}
                   </Box>
                 </Box>
               )}

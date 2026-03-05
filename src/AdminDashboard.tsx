@@ -448,6 +448,67 @@ const getUserQuery = /* GraphQL */ `
   }
 `
 
+const listDiscountsQuery = /* GraphQL */ `
+  query ListDiscounts {
+    listDiscounts {
+      items {
+        id
+        name
+        description
+        code
+        discountType
+        value
+        isActive
+        startDate
+        endDate
+        conditions
+      }
+    }
+  }
+`
+
+const createDiscountMutation = /* GraphQL */ `
+  mutation CreateDiscount($input: CreateDiscountInput!) {
+    createDiscount(input: $input) {
+      id
+      name
+      description
+      code
+      discountType
+      value
+      isActive
+      startDate
+      endDate
+      conditions
+    }
+  }
+`
+
+const updateDiscountMutation = /* GraphQL */ `
+  mutation UpdateDiscount($input: UpdateDiscountInput!) {
+    updateDiscount(input: $input) {
+      id
+      name
+      description
+      code
+      discountType
+      value
+      isActive
+      startDate
+      endDate
+      conditions
+    }
+  }
+`
+
+const deleteDiscountMutation = /* GraphQL */ `
+  mutation DeleteDiscount($input: DeleteDiscountInput!) {
+    deleteDiscount(input: $input) {
+      id
+    }
+  }
+`
+
 interface Ad {
   id: string
   title: string
@@ -536,6 +597,42 @@ interface SectionSubSection {
   sortOrder: number
   addonFeeOverride?: number
   isArchived: boolean
+}
+
+interface Discount {
+  id: string
+  name: string
+  description?: string
+  code?: string
+  discountType: 'FLAT' | 'PERCENTAGE'
+  value: number
+  isActive: boolean
+  startDate?: string
+  endDate?: string
+  conditions?: string // JSON: { productIds, placementIds, sectionIds, minPlacements }
+}
+
+interface DiscountConditions {
+  productIds: string[]
+  placementIds: string[]
+  sectionIds: string[]
+  minPlacements: number
+}
+
+const DEFAULT_DISCOUNT_FORM = {
+  name: '',
+  description: '',
+  isAutomatic: true,
+  code: '',
+  discountType: 'FLAT' as 'FLAT' | 'PERCENTAGE',
+  value: '',
+  isActive: true,
+  startDate: '',
+  endDate: '',
+  conditionProductIds: [] as string[],
+  conditionPlacementIds: [] as string[],
+  conditionSectionIds: [] as string[],
+  conditionMinPlacements: '',
 }
 
 interface AdminDashboardProps {
@@ -726,7 +823,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [productForm, setProductForm] = useState({ name: '', widthInches: 3, basePrice: 25 })
 
-  // Products sub-tab (0 = Products, 1 = Placements)
+  // Products sub-tab (0 = Products, 1 = Placements, 2 = Sections, 3 = Sub-Sections)
   const [productsSubTab, setProductsSubTab] = useState(0)
 
   // Placement state
@@ -778,6 +875,14 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
   // Expanded section row (for sub-sections sub-table in Sections sub-tab)
   const [expandedSectionId, setExpandedSectionId] = useState<string | null>(null)
 
+  // Discount state
+  const [discounts, setDiscounts] = useState<Discount[]>([])
+  const [discountDialogOpen, setDiscountDialogOpen] = useState(false)
+  const [editingDiscount, setEditingDiscount] = useState<Discount | null>(null)
+  const [discountForm, setDiscountForm] = useState(DEFAULT_DISCOUNT_FORM)
+  const [deleteDiscountDialogOpen, setDeleteDiscountDialogOpen] = useState(false)
+  const [deletingDiscountId, setDeletingDiscountId] = useState<string | null>(null)
+
   // DnD sensors
   const sensors = useSensors(useSensor(PointerSensor))
 
@@ -810,6 +915,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
     else if (activeTab === 1) loadUsers()
     else if (activeTab === 2) { loadProducts(); loadAllPlacements(); loadAllSections(); loadAllSubSections() }
     else if (activeTab === 3) loadPricingSettings()
+    else if (activeTab === 4) { loadDiscounts(); loadProducts(); loadAllPlacements(); loadAllSections() }
   }, [activeTab, initialAdFilter, adIdSearch])
 
   const loadAds = async (adIdFilter?: string) => {
@@ -1139,6 +1245,136 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
     }
   }
   
+  const loadDiscounts = async () => {
+    setIsLoading(true)
+    try {
+      const result = await client.graphql({
+        query: listDiscountsQuery,
+        authMode: 'userPool'
+      }) as { data: { listDiscounts: { items: Discount[] } } }
+      setDiscounts(result.data.listDiscounts.items || [])
+    } catch (error) {
+      console.error('Error loading discounts:', error)
+      setSnackbar({ open: true, message: 'Failed to load discounts', severity: 'error' })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleOpenDiscountDialog = (discount?: Discount) => {
+    if (discount) {
+      setEditingDiscount(discount)
+      const conds: DiscountConditions = discount.conditions
+        ? JSON.parse(discount.conditions)
+        : { productIds: [], placementIds: [], sectionIds: [], minPlacements: 0 }
+      setDiscountForm({
+        name: discount.name,
+        description: discount.description || '',
+        isAutomatic: !discount.code,
+        code: discount.code || '',
+        discountType: discount.discountType,
+        value: discount.value.toString(),
+        isActive: discount.isActive,
+        startDate: discount.startDate || '',
+        endDate: discount.endDate || '',
+        conditionProductIds: conds.productIds || [],
+        conditionPlacementIds: conds.placementIds || [],
+        conditionSectionIds: conds.sectionIds || [],
+        conditionMinPlacements: conds.minPlacements ? conds.minPlacements.toString() : '',
+      })
+    } else {
+      setEditingDiscount(null)
+      setDiscountForm(DEFAULT_DISCOUNT_FORM)
+    }
+    setDiscountDialogOpen(true)
+  }
+
+  const handleSaveDiscount = async () => {
+    if (!discountForm.name.trim()) {
+      setSnackbar({ open: true, message: 'Name is required', severity: 'warning' })
+      return
+    }
+    const numValue = parseFloat(discountForm.value)
+    if (isNaN(numValue) || numValue < 0) {
+      setSnackbar({ open: true, message: 'Enter a valid discount value', severity: 'warning' })
+      return
+    }
+    if (discountForm.discountType === 'PERCENTAGE' && numValue > 100) {
+      setSnackbar({ open: true, message: 'Percentage cannot exceed 100', severity: 'warning' })
+      return
+    }
+    if (!discountForm.isAutomatic && !discountForm.code.trim()) {
+      setSnackbar({ open: true, message: 'Coupon code is required', severity: 'warning' })
+      return
+    }
+
+    const conditions: DiscountConditions = {
+      productIds: discountForm.conditionProductIds,
+      placementIds: discountForm.conditionPlacementIds,
+      sectionIds: discountForm.conditionSectionIds,
+      minPlacements: discountForm.conditionMinPlacements ? parseInt(discountForm.conditionMinPlacements) : 0,
+    }
+
+    const input: any = {
+      name: discountForm.name.trim(),
+      description: discountForm.description.trim() || null,
+      code: discountForm.isAutomatic ? null : discountForm.code.trim().toUpperCase(),
+      discountType: discountForm.discountType,
+      value: numValue,
+      isActive: discountForm.isActive,
+      startDate: discountForm.startDate || null,
+      endDate: discountForm.endDate || null,
+      conditions: JSON.stringify(conditions),
+    }
+
+    setIsLoading(true)
+    try {
+      if (editingDiscount) {
+        await client.graphql({
+          query: updateDiscountMutation,
+          variables: { input: { id: editingDiscount.id, ...input } },
+          authMode: 'userPool'
+        })
+        setSnackbar({ open: true, message: 'Discount updated', severity: 'success' })
+      } else {
+        await client.graphql({
+          query: createDiscountMutation,
+          variables: { input },
+          authMode: 'userPool'
+        })
+        setSnackbar({ open: true, message: 'Discount created', severity: 'success' })
+      }
+      setDiscountDialogOpen(false)
+      await loadDiscounts()
+    } catch (error) {
+      console.error('Error saving discount:', error)
+      setSnackbar({ open: true, message: 'Failed to save discount', severity: 'error' })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  const handleDeleteDiscount = async () => {
+    if (!deletingDiscountId) return
+    setIsLoading(true)
+    try {
+      await client.graphql({
+        query: deleteDiscountMutation,
+        variables: { input: { id: deletingDiscountId } },
+        authMode: 'userPool'
+      })
+      setSnackbar({ open: true, message: 'Discount deleted', severity: 'success' })
+      setDeleteDiscountDialogOpen(false)
+      setDeletingDiscountId(null)
+      await loadDiscounts()
+    } catch (error) {
+      console.error('Error deleting discount:', error)
+      setSnackbar({ open: true, message: 'Failed to delete discount', severity: 'error' })
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
   // Validate currency input (numbers only, max 2 decimal places)
   const validateCurrencyInput = (value: string): string => {
     // Remove any non-numeric characters except decimal point
@@ -2807,6 +3043,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
             <Tab label="Users" />
             <Tab label="Products" />
             <Tab label="Pricing" />
+            <Tab label="Discounts" />
           </Tabs>
         </Paper>
 
@@ -3214,13 +3451,13 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
               <Paper>
                 <Tabs value={productsSubTab} onChange={(_, v) => setProductsSubTab(v)} sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
                   <Tab label="Products" />
+                  <Tab label="Placements" />
                   <Tab label="Sections" />
                   <Tab label="Sub-Sections" />
-                  <Tab label="Placements" />
                 </Tabs>
 
                 {/* Placements sub-tab */}
-                {productsSubTab === 3 && <Paper elevation={0}>
+                {productsSubTab === 1 && <Paper elevation={0}>
                   <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Typography variant="subtitle1" fontWeight={600}>Placements Library</Typography>
                     <Button
@@ -3298,7 +3535,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                 </Paper>}
 
                 {/* Sections sub-tab */}
-                {productsSubTab === 1 && <Paper elevation={0}>
+                {productsSubTab === 2 && <Paper elevation={0}>
                   <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Typography variant="subtitle1" fontWeight={600}>Section Library</Typography>
                     <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => {
@@ -3450,7 +3687,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                 </Paper>}
 
                 {/* Sub-Sections sub-tab */}
-                {productsSubTab === 2 && <Paper elevation={0}>
+                {productsSubTab === 3 && <Paper elevation={0}>
                   <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Typography variant="subtitle1" fontWeight={600}>Sub-Section Library</Typography>
                     <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => {
@@ -3820,15 +4057,17 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                   </Box>
                 </Box>
                 
-                <Box sx={{ width: '100%', display: 'flex', flexWrap: 'wrap', gap: 3 }}>
+                <Stack spacing={2}>
                   {/* Base Price */}
-                  <Box sx={{ width: { xs: '100%', md: 'calc(33.333% - 16px)' }, display: 'flex' }}>
-                    <Paper variant="outlined" sx={{ p: 2, width: '100%', minHeight: 200, display: 'flex', flexDirection: 'column' }}>
-                      <Typography variant="subtitle1" gutterBottom fontWeight={600}>Base Price</Typography>
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                    <Box sx={{ minWidth: 220 }}>
+                      <Typography variant="subtitle1" fontWeight={600}>Base Price</Typography>
+                      <Typography variant="caption" color="text.secondary">Base price for this product</Typography>
+                    </Box>
+                    <Box>
                       <TextField
                         type="text"
                         size="small"
-                        fullWidth
                         label="Base price ($)"
                         value={localBasePrice}
                         onChange={(e) => {
@@ -3837,20 +4076,19 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                         }}
                         disabled={!selectedPricingProduct}
                       />
-                      <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                        Base price for this product
-                      </Typography>
-                    </Paper>
-                  </Box>
-                  
+                    </Box>
+                  </Paper>
+
                   {/* Price Per Day */}
-                  <Box sx={{ width: { xs: '100%', md: 'calc(33.333% - 16px)' }, display: 'flex' }}>
-                    <Paper variant="outlined" sx={{ p: 2, width: '100%', minHeight: 200, display: 'flex', flexDirection: 'column' }}>
-                      <Typography variant="subtitle1" gutterBottom fontWeight={600}>Price Per Day</Typography>
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                    <Box sx={{ minWidth: 220 }}>
+                      <Typography variant="subtitle1" fontWeight={600}>Price Per Day</Typography>
+                      <Typography variant="caption" color="text.secondary">Additional price charged per day the ad runs</Typography>
+                    </Box>
+                    <Box>
                       <TextField
                         type="text"
                         size="small"
-                        fullWidth
                         label="Price per day ($)"
                         value={localPricingValues[`pricePerDay_${selectedPricingProduct}`] || '0.00'}
                         onChange={(e) => {
@@ -3862,138 +4100,19 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                         }}
                         disabled={!selectedPricingProduct}
                       />
-                      <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                        Additional price charged per day the ad runs
-                      </Typography>
-                    </Paper>
-                  </Box>
-                  
-                  {/* Border Options */}
-                  <Box sx={{ width: { xs: '100%', md: 'calc(33.333% - 16px)' }, display: 'flex' }}>
-                    <Paper variant="outlined" sx={{ p: 2, width: '100%', minHeight: 200, display: 'flex', flexDirection: 'column' }}>
-                      <Typography variant="subtitle1" gutterBottom fontWeight={600}>Border Selection</Typography>
-                      <Stack spacing={1}>
-                        {['none', 'thin', 'thick', 'dashed'].map(borderType => {
-                          return (
-                            <Box key={borderType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                              <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{borderType}</Typography>
-                              <TextField
-                                type="text"
-                                size="small"
-                                label="Price ($)"
-                                value={localPricingValues[`border_${borderType}_${selectedPricingProduct}`] || '0.00'}
-                                onChange={(e) => {
-                                  const validated = validateCurrencyInput(e.target.value)
-                                  setLocalPricingValues({
-                                    ...localPricingValues,
-                                    [`border_${borderType}_${selectedPricingProduct}`]: validated
-                                  })
-                                }}
-                                sx={{ flex: 1 }}
-                                disabled={!selectedPricingProduct}
-                              />
-                            </Box>
-                          )
-                        })}
-                      </Stack>
-                    </Paper>
-                  </Box>
-                  
-                  {/* Corner Options */}
-                  <Box sx={{ width: { xs: '100%', md: 'calc(33.333% - 16px)' }, display: 'flex' }}>
-                    <Paper variant="outlined" sx={{ p: 2, width: '100%', minHeight: 200, display: 'flex', flexDirection: 'column' }}>
-                      <Typography variant="subtitle1" gutterBottom fontWeight={600}>Corners</Typography>
-                      <Stack spacing={1}>
-                        {['flat', 'rounded'].map(cornerType => {
-                          return (
-                            <Box key={cornerType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                              <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{cornerType}</Typography>
-                              <TextField
-                                type="text"
-                                size="small"
-                                label="Price ($)"
-                                value={localPricingValues[`corner_${cornerType}_${selectedPricingProduct}`] || '0.00'}
-                                onChange={(e) => {
-                                  const validated = validateCurrencyInput(e.target.value)
-                                  setLocalPricingValues({
-                                    ...localPricingValues,
-                                    [`corner_${cornerType}_${selectedPricingProduct}`]: validated
-                                  })
-                                }}
-                                sx={{ flex: 1 }}
-                                disabled={!selectedPricingProduct}
-                              />
-                            </Box>
-                          )
-                        })}
-                      </Stack>
-                    </Paper>
-                  </Box>
-                  
-                  {/* Padding Options */}
-                  <Box sx={{ width: { xs: '100%', md: 'calc(33.333% - 16px)' }, display: 'flex' }}>
-                    <Paper variant="outlined" sx={{ p: 2, width: '100%', minHeight: 200, display: 'flex', flexDirection: 'column' }}>
-                      <Typography variant="subtitle1" gutterBottom fontWeight={600}>Padding</Typography>
-                      <Stack spacing={1}>
-                        {['none', 'medium', 'large'].map(paddingType => {
-                          return (
-                            <Box key={paddingType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                              <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{paddingType}</Typography>
-                              <TextField
-                                type="text"
-                                size="small"
-                                label="Price ($)"
-                                value={localPricingValues[`padding_${paddingType}_${selectedPricingProduct}`] || '0.00'}
-                                onChange={(e) => {
-                                  const validated = validateCurrencyInput(e.target.value)
-                                  setLocalPricingValues({
-                                    ...localPricingValues,
-                                    [`padding_${paddingType}_${selectedPricingProduct}`]: validated
-                                  })
-                                }}
-                                sx={{ flex: 1 }}
-                                disabled={!selectedPricingProduct}
-                              />
-                            </Box>
-                          )
-                        })}
-                      </Stack>
-                    </Paper>
-                  </Box>
-                  
-                  {/* Word Count */}
-                  <Box sx={{ width: { xs: '100%', md: 'calc(33.333% - 16px)' }, display: 'flex' }}>
-                    <Paper variant="outlined" sx={{ p: 2, width: '100%', minHeight: 200, display: 'flex', flexDirection: 'column' }}>
-                      <Typography variant="subtitle1" gutterBottom fontWeight={600}>Word Count</Typography>
-                      <TextField
-                        type="text"
-                        size="small"
-                        fullWidth
-                        label="Price per word ($)"
-                        value={localPricingValues[`pricePerWord_${selectedPricingProduct}`] || '0.00'}
-                        onChange={(e) => {
-                          const validated = validateCurrencyInput(e.target.value)
-                          setLocalPricingValues({
-                            ...localPricingValues,
-                            [`pricePerWord_${selectedPricingProduct}`]: validated
-                          })
-                        }}
-                        disabled={!selectedPricingProduct}
-                      />
-                      <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                        Price charged for each word in text blocks
-                      </Typography>
-                    </Paper>
-                  </Box>
-                  
+                    </Box>
+                  </Paper>
+
                   {/* Line Count */}
-                  <Box sx={{ width: { xs: '100%', md: 'calc(33.333% - 16px)' }, display: 'flex' }}>
-                    <Paper variant="outlined" sx={{ p: 2, width: '100%', minHeight: 200, display: 'flex', flexDirection: 'column' }}>
-                      <Typography variant="subtitle1" gutterBottom fontWeight={600}>Line Count</Typography>
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                    <Box sx={{ minWidth: 220 }}>
+                      <Typography variant="subtitle1" fontWeight={600}>Line Count</Typography>
+                      <Typography variant="caption" color="text.secondary">Price charged for each line of text</Typography>
+                    </Box>
+                    <Box>
                       <TextField
                         type="text"
                         size="small"
-                        fullWidth
                         label="Price per line ($)"
                         value={localPricingValues[`pricePerLine_${selectedPricingProduct}`] || '0.00'}
                         onChange={(e) => {
@@ -4005,184 +4124,43 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                         }}
                         disabled={!selectedPricingProduct}
                       />
-                      <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                        Price charged for each line of text
-                      </Typography>
-                    </Paper>
-                  </Box>
-                  
-                  {/* Text Formatting */}
-                  <Box sx={{ width: { xs: '100%', md: 'calc(33.333% - 16px)' }, display: 'flex' }}>
-                    <Paper variant="outlined" sx={{ p: 2, width: '100%', minHeight: 200, display: 'flex', flexDirection: 'column' }}>
-                      <Typography variant="subtitle1" gutterBottom fontWeight={600}>Text Formatting</Typography>
-                      <Stack spacing={1}>
-                        {[
-                          { key: 'pricePerBold', label: 'Bold Sections', desc: 'Price per text block with bold formatting' },
-                          { key: 'pricePerItalic', label: 'Italic Sections', desc: 'Price per text block with italic formatting' },
-                          { key: 'pricePerUnderline', label: 'Underline Sections', desc: 'Price per text block with underline formatting' },
-                        ].map(item => {
-                          return (
-                            <Box key={item.key}>
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 0.5 }}>
-                                <Typography sx={{ minWidth: 150 }}>{item.label}</Typography>
-                                <TextField
-                                  type="text"
-                                  size="small"
-                                  label="Price ($)"
-                                  value={localPricingValues[`${item.key}_${selectedPricingProduct}`] || '0.00'}
-                                  onChange={(e) => {
-                                    const validated = validateCurrencyInput(e.target.value)
-                                    setLocalPricingValues({
-                                      ...localPricingValues,
-                                      [`${item.key}_${selectedPricingProduct}`]: validated
-                                    })
-                                  }}
-                                  sx={{ flex: 1 }}
-                                  disabled={!selectedPricingProduct}
-                                />
-                              </Box>
-                              <Typography variant="caption" color="text.secondary" sx={{ ml: 17 }}>
-                                {item.desc}
-                              </Typography>
-                            </Box>
-                          )
-                        })}
-                      </Stack>
-                    </Paper>
-                  </Box>
-                  
-                  {/* Alignment Options */}
-                  <Box sx={{ width: { xs: '100%', md: 'calc(33.333% - 16px)' }, display: 'flex' }}>
-                    <Paper variant="outlined" sx={{ p: 2, width: '100%', minHeight: 200, display: 'flex', flexDirection: 'column' }}>
-                      <Typography variant="subtitle1" gutterBottom fontWeight={600}>Text Alignment</Typography>
-                      <Stack spacing={1}>
-                        {['left', 'center', 'right', 'justify'].map(alignType => {
-                          return (
-                            <Box key={alignType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                              <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{alignType}</Typography>
-                              <TextField
-                                type="text"
-                                size="small"
-                                label="Price ($)"
-                                value={localPricingValues[`alignment_${alignType}_${selectedPricingProduct}`] || '0.00'}
-                                onChange={(e) => {
-                                  const validated = validateCurrencyInput(e.target.value)
-                                  setLocalPricingValues({
-                                    ...localPricingValues,
-                                    [`alignment_${alignType}_${selectedPricingProduct}`]: validated
-                                  })
-                                }}
-                                sx={{ flex: 1 }}
-                                disabled={!selectedPricingProduct}
-                              />
-                            </Box>
-                          )
-                        })}
-                      </Stack>
-                    </Paper>
-                  </Box>
-                  
-                  {/* Size Options */}
-                  <Box sx={{ width: { xs: '100%', md: 'calc(33.333% - 16px)' }, display: 'flex' }}>
-                    <Paper variant="outlined" sx={{ p: 2, width: '100%', minHeight: 200, display: 'flex', flexDirection: 'column' }}>
-                      <Typography variant="subtitle1" gutterBottom fontWeight={600}>Text Size</Typography>
-                      <Stack spacing={1}>
-                        {['small', 'medium', 'large'].map(sizeType => {
-                          return (
-                            <Box key={sizeType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                              <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{sizeType}</Typography>
-                              <TextField
-                                type="text"
-                                size="small"
-                                label="Price ($)"
-                                value={localPricingValues[`size_${sizeType}_${selectedPricingProduct}`] || '0.00'}
-                                onChange={(e) => {
-                                  const validated = validateCurrencyInput(e.target.value)
-                                  setLocalPricingValues({
-                                    ...localPricingValues,
-                                    [`size_${sizeType}_${selectedPricingProduct}`]: validated
-                                  })
-                                }}
-                                sx={{ flex: 1 }}
-                                disabled={!selectedPricingProduct}
-                              />
-                            </Box>
-                          )
-                        })}
-                      </Stack>
-                    </Paper>
-                  </Box>
-                  
-                  {/* Font Options */}
-                  <Box sx={{ width: { xs: '100%', md: 'calc(33.333% - 16px)' }, display: 'flex' }}>
-                    <Paper variant="outlined" sx={{ p: 2, width: '100%', minHeight: 200, display: 'flex', flexDirection: 'column' }}>
-                      <Typography variant="subtitle1" gutterBottom fontWeight={600}>Font</Typography>
-                      <Stack spacing={1}>
-                        {['serif', 'sans-serif'].map(fontType => {
-                          return (
-                            <Box key={fontType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                              <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{fontType}</Typography>
-                              <TextField
-                                type="text"
-                                size="small"
-                                label="Price ($)"
-                                value={localPricingValues[`font_${fontType}_${selectedPricingProduct}`] || '0.00'}
-                                onChange={(e) => {
-                                  const validated = validateCurrencyInput(e.target.value)
-                                  setLocalPricingValues({
-                                    ...localPricingValues,
-                                    [`font_${fontType}_${selectedPricingProduct}`]: validated
-                                  })
-                                }}
-                                sx={{ flex: 1 }}
-                                disabled={!selectedPricingProduct}
-                              />
-                            </Box>
-                          )
-                        })}
-                      </Stack>
-                    </Paper>
-                  </Box>
-                  
-                  {/* Highlight Options */}
-                  <Box sx={{ width: { xs: '100%', md: 'calc(33.333% - 16px)' }, display: 'flex' }}>
-                    <Paper variant="outlined" sx={{ p: 2, width: '100%', minHeight: 200, display: 'flex', flexDirection: 'column' }}>
-                      <Typography variant="subtitle1" gutterBottom fontWeight={600}>Text Highlight</Typography>
-                      <Stack spacing={1}>
-                        {['none', 'black', 'gray'].map(highlightType => {
-                          return (
-                            <Box key={highlightType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                              <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{highlightType}</Typography>
-                              <TextField
-                                type="text"
-                                size="small"
-                                label="Price ($)"
-                                value={localPricingValues[`highlight_${highlightType}_${selectedPricingProduct}`] || '0.00'}
-                                onChange={(e) => {
-                                  const validated = validateCurrencyInput(e.target.value)
-                                  setLocalPricingValues({
-                                    ...localPricingValues,
-                                    [`highlight_${highlightType}_${selectedPricingProduct}`]: validated
-                                  })
-                                }}
-                                sx={{ flex: 1 }}
-                                disabled={!selectedPricingProduct}
-                              />
-                            </Box>
-                          )
-                        })}
-                      </Stack>
-                    </Paper>
-                  </Box>
-                  
-                  {/* Image Pricing */}
-                  <Box sx={{ width: { xs: '100%', md: 'calc(33.333% - 16px)' }, display: 'flex' }}>
-                    <Paper variant="outlined" sx={{ p: 2, width: '100%', minHeight: 200, display: 'flex', flexDirection: 'column' }}>
-                      <Typography variant="subtitle1" gutterBottom fontWeight={600}>Images</Typography>
+                    </Box>
+                  </Paper>
+
+                  {/* Word Count */}
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                    <Box sx={{ minWidth: 220 }}>
+                      <Typography variant="subtitle1" fontWeight={600}>Word Count</Typography>
+                      <Typography variant="caption" color="text.secondary">Price charged for each word in text blocks</Typography>
+                    </Box>
+                    <Box>
                       <TextField
                         type="text"
                         size="small"
-                        fullWidth
+                        label="Price per word ($)"
+                        value={localPricingValues[`pricePerWord_${selectedPricingProduct}`] || '0.00'}
+                        onChange={(e) => {
+                          const validated = validateCurrencyInput(e.target.value)
+                          setLocalPricingValues({
+                            ...localPricingValues,
+                            [`pricePerWord_${selectedPricingProduct}`]: validated
+                          })
+                        }}
+                        disabled={!selectedPricingProduct}
+                      />
+                    </Box>
+                  </Paper>
+
+                  {/* Images */}
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                    <Box sx={{ minWidth: 220 }}>
+                      <Typography variant="subtitle1" fontWeight={600}>Images</Typography>
+                      <Typography variant="caption" color="text.secondary">Price charged for each image in the ad</Typography>
+                    </Box>
+                    <Box>
+                      <TextField
+                        type="text"
+                        size="small"
                         label="Price per image ($)"
                         value={localPricingValues[`pricePerImage_${selectedPricingProduct}`] || '0.00'}
                         onChange={(e) => {
@@ -4194,12 +4172,245 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                         }}
                         disabled={!selectedPricingProduct}
                       />
-                      <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-                        Price charged for each image in the ad
-                      </Typography>
-                    </Paper>
-                  </Box>
-                </Box>
+                    </Box>
+                  </Paper>
+
+                  {/* Border Selection */}
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                    <Box sx={{ minWidth: 220 }}>
+                      <Typography variant="subtitle1" fontWeight={600}>Border Selection</Typography>
+                    </Box>
+                    <Stack spacing={1} sx={{ flex: 1 }}>
+                      {['none', 'thin', 'thick', 'dashed'].map(borderType => (
+                        <Box key={borderType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{borderType}</Typography>
+                          <TextField
+                            type="text"
+                            size="small"
+                            label="Price ($)"
+                            value={localPricingValues[`border_${borderType}_${selectedPricingProduct}`] || '0.00'}
+                            onChange={(e) => {
+                              const validated = validateCurrencyInput(e.target.value)
+                              setLocalPricingValues({
+                                ...localPricingValues,
+                                [`border_${borderType}_${selectedPricingProduct}`]: validated
+                              })
+                            }}
+                            sx={{ flex: 1 }}
+                            disabled={!selectedPricingProduct}
+                          />
+                        </Box>
+                      ))}
+                    </Stack>
+                  </Paper>
+
+                  {/* Corner Options */}
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                    <Box sx={{ minWidth: 220 }}>
+                      <Typography variant="subtitle1" fontWeight={600}>Corners</Typography>
+                    </Box>
+                    <Stack spacing={1} sx={{ flex: 1 }}>
+                      {['flat', 'rounded'].map(cornerType => (
+                        <Box key={cornerType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{cornerType}</Typography>
+                          <TextField
+                            type="text"
+                            size="small"
+                            label="Price ($)"
+                            value={localPricingValues[`corner_${cornerType}_${selectedPricingProduct}`] || '0.00'}
+                            onChange={(e) => {
+                              const validated = validateCurrencyInput(e.target.value)
+                              setLocalPricingValues({
+                                ...localPricingValues,
+                                [`corner_${cornerType}_${selectedPricingProduct}`]: validated
+                              })
+                            }}
+                            sx={{ flex: 1 }}
+                            disabled={!selectedPricingProduct}
+                          />
+                        </Box>
+                      ))}
+                    </Stack>
+                  </Paper>
+
+                  {/* Padding Options */}
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                    <Box sx={{ minWidth: 220 }}>
+                      <Typography variant="subtitle1" fontWeight={600}>Padding</Typography>
+                    </Box>
+                    <Stack spacing={1} sx={{ flex: 1 }}>
+                      {['none', 'medium', 'large'].map(paddingType => (
+                        <Box key={paddingType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{paddingType}</Typography>
+                          <TextField
+                            type="text"
+                            size="small"
+                            label="Price ($)"
+                            value={localPricingValues[`padding_${paddingType}_${selectedPricingProduct}`] || '0.00'}
+                            onChange={(e) => {
+                              const validated = validateCurrencyInput(e.target.value)
+                              setLocalPricingValues({
+                                ...localPricingValues,
+                                [`padding_${paddingType}_${selectedPricingProduct}`]: validated
+                              })
+                            }}
+                            sx={{ flex: 1 }}
+                            disabled={!selectedPricingProduct}
+                          />
+                        </Box>
+                      ))}
+                    </Stack>
+                  </Paper>
+
+                  {/* Text Formatting */}
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                    <Box sx={{ minWidth: 220 }}>
+                      <Typography variant="subtitle1" fontWeight={600}>Text Formatting</Typography>
+                    </Box>
+                    <Stack spacing={1} sx={{ flex: 1 }}>
+                      {[
+                        { key: 'pricePerBold', label: 'Bold Sections' },
+                        { key: 'pricePerItalic', label: 'Italic Sections' },
+                        { key: 'pricePerUnderline', label: 'Underline Sections' },
+                      ].map(item => (
+                        <Box key={item.key} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Typography sx={{ minWidth: 150 }}>{item.label}</Typography>
+                          <TextField
+                            type="text"
+                            size="small"
+                            label="Price ($)"
+                            value={localPricingValues[`${item.key}_${selectedPricingProduct}`] || '0.00'}
+                            onChange={(e) => {
+                              const validated = validateCurrencyInput(e.target.value)
+                              setLocalPricingValues({
+                                ...localPricingValues,
+                                [`${item.key}_${selectedPricingProduct}`]: validated
+                              })
+                            }}
+                            sx={{ flex: 1 }}
+                            disabled={!selectedPricingProduct}
+                          />
+                        </Box>
+                      ))}
+                    </Stack>
+                  </Paper>
+
+                  {/* Text Alignment */}
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                    <Box sx={{ minWidth: 220 }}>
+                      <Typography variant="subtitle1" fontWeight={600}>Text Alignment</Typography>
+                    </Box>
+                    <Stack spacing={1} sx={{ flex: 1 }}>
+                      {['left', 'center', 'right', 'justify'].map(alignType => (
+                        <Box key={alignType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{alignType}</Typography>
+                          <TextField
+                            type="text"
+                            size="small"
+                            label="Price ($)"
+                            value={localPricingValues[`alignment_${alignType}_${selectedPricingProduct}`] || '0.00'}
+                            onChange={(e) => {
+                              const validated = validateCurrencyInput(e.target.value)
+                              setLocalPricingValues({
+                                ...localPricingValues,
+                                [`alignment_${alignType}_${selectedPricingProduct}`]: validated
+                              })
+                            }}
+                            sx={{ flex: 1 }}
+                            disabled={!selectedPricingProduct}
+                          />
+                        </Box>
+                      ))}
+                    </Stack>
+                  </Paper>
+
+                  {/* Text Size */}
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                    <Box sx={{ minWidth: 220 }}>
+                      <Typography variant="subtitle1" fontWeight={600}>Text Size</Typography>
+                    </Box>
+                    <Stack spacing={1} sx={{ flex: 1 }}>
+                      {['small', 'medium', 'large'].map(sizeType => (
+                        <Box key={sizeType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{sizeType}</Typography>
+                          <TextField
+                            type="text"
+                            size="small"
+                            label="Price ($)"
+                            value={localPricingValues[`size_${sizeType}_${selectedPricingProduct}`] || '0.00'}
+                            onChange={(e) => {
+                              const validated = validateCurrencyInput(e.target.value)
+                              setLocalPricingValues({
+                                ...localPricingValues,
+                                [`size_${sizeType}_${selectedPricingProduct}`]: validated
+                              })
+                            }}
+                            sx={{ flex: 1 }}
+                            disabled={!selectedPricingProduct}
+                          />
+                        </Box>
+                      ))}
+                    </Stack>
+                  </Paper>
+
+                  {/* Font */}
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                    <Box sx={{ minWidth: 220 }}>
+                      <Typography variant="subtitle1" fontWeight={600}>Font</Typography>
+                    </Box>
+                    <Stack spacing={1} sx={{ flex: 1 }}>
+                      {['serif', 'sans-serif'].map(fontType => (
+                        <Box key={fontType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{fontType}</Typography>
+                          <TextField
+                            type="text"
+                            size="small"
+                            label="Price ($)"
+                            value={localPricingValues[`font_${fontType}_${selectedPricingProduct}`] || '0.00'}
+                            onChange={(e) => {
+                              const validated = validateCurrencyInput(e.target.value)
+                              setLocalPricingValues({
+                                ...localPricingValues,
+                                [`font_${fontType}_${selectedPricingProduct}`]: validated
+                              })
+                            }}
+                            sx={{ flex: 1 }}
+                            disabled={!selectedPricingProduct}
+                          />
+                        </Box>
+                      ))}
+                    </Stack>
+                  </Paper>
+
+                  {/* Text Highlight */}
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                    <Box sx={{ minWidth: 220 }}>
+                      <Typography variant="subtitle1" fontWeight={600}>Text Highlight</Typography>
+                    </Box>
+                    <Stack spacing={1} sx={{ flex: 1 }}>
+                      {['none', 'black', 'gray'].map(highlightType => (
+                        <Box key={highlightType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                          <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{highlightType}</Typography>
+                          <TextField
+                            type="text"
+                            size="small"
+                            label="Price ($)"
+                            value={localPricingValues[`highlight_${highlightType}_${selectedPricingProduct}`] || '0.00'}
+                            onChange={(e) => {
+                              const validated = validateCurrencyInput(e.target.value)
+                              setLocalPricingValues({
+                                ...localPricingValues,
+                                [`highlight_${highlightType}_${selectedPricingProduct}`]: validated
+                              })
+                            }}
+                            sx={{ flex: 1 }}
+                            disabled={!selectedPricingProduct}
+                          />
+                        </Box>
+                      ))}
+                    </Stack>
+                  </Paper>
+                </Stack>
                 
                 {/* Save Button */}
                 <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4, mb: 2 }}>
@@ -4219,9 +4430,344 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
               </Paper>
             )}
 
+            {/* Discounts Tab */}
+            {activeTab === 4 && (
+              <Paper sx={{ p: 3 }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                  <Typography variant="h6">Discounts</Typography>
+                  <Button variant="contained" startIcon={<AddIcon />} onClick={() => handleOpenDiscountDialog()}>
+                    Add Discount
+                  </Button>
+                </Box>
+
+                {discounts.length === 0 ? (
+                  <Typography color="text.secondary" sx={{ py: 4, textAlign: 'center' }}>
+                    No discounts configured. Click "Add Discount" to create one.
+                  </Typography>
+                ) : (
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Name</TableCell>
+                        <TableCell>Trigger</TableCell>
+                        <TableCell>Discount</TableCell>
+                        <TableCell>Active</TableCell>
+                        <TableCell>Validity</TableCell>
+                        <TableCell>Conditions</TableCell>
+                        <TableCell align="right">Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {discounts.map(discount => {
+                        const conds: DiscountConditions = discount.conditions
+                          ? JSON.parse(discount.conditions)
+                          : { productIds: [], placementIds: [], sectionIds: [], minPlacements: 0 }
+                        const condSummary = [
+                          conds.productIds?.length ? `${conds.productIds.length} product(s)` : null,
+                          conds.placementIds?.length ? `${conds.placementIds.length} placement(s)` : null,
+                          conds.sectionIds?.length ? `${conds.sectionIds.length} section(s)` : null,
+                          conds.minPlacements > 0 ? `min ${conds.minPlacements} placements` : null,
+                        ].filter(Boolean).join(', ') || 'No restrictions'
+                        return (
+                          <TableRow key={discount.id}>
+                            <TableCell>
+                              <Typography variant="body2" fontWeight={500}>{discount.name}</Typography>
+                              {discount.description && (
+                                <Typography variant="caption" color="text.secondary">{discount.description}</Typography>
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {discount.code
+                                ? <Chip size="small" label={`Code: ${discount.code}`} variant="outlined" />
+                                : <Chip size="small" label="Automatic" color="primary" variant="outlined" />}
+                            </TableCell>
+                            <TableCell>
+                              {discount.discountType === 'FLAT'
+                                ? `-$${discount.value.toFixed(2)}`
+                                : `-${discount.value}%`}
+                            </TableCell>
+                            <TableCell>
+                              <Chip
+                                size="small"
+                                label={discount.isActive ? 'Active' : 'Inactive'}
+                                color={discount.isActive ? 'success' : 'default'}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="caption">
+                                {discount.startDate || discount.endDate
+                                  ? `${discount.startDate || '∞'} – ${discount.endDate || '∞'}`
+                                  : 'Always'}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="caption" color="text.secondary">{condSummary}</Typography>
+                            </TableCell>
+                            <TableCell align="right">
+                              <IconButton size="small" onClick={() => handleOpenDiscountDialog(discount)}>
+                                <EditIcon fontSize="small" />
+                              </IconButton>
+                              <IconButton
+                                size="small"
+                                color="error"
+                                onClick={() => { setDeletingDiscountId(discount.id); setDeleteDiscountDialogOpen(true) }}
+                              >
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                )}
+              </Paper>
+            )}
+
           </>
         )}
       </Box>
+
+      {/* Discount Create/Edit Dialog */}
+      <Dialog open={discountDialogOpen} onClose={() => setDiscountDialogOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>{editingDiscount ? 'Edit Discount' : 'Add Discount'}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Name"
+              fullWidth
+              required
+              value={discountForm.name}
+              onChange={(e) => setDiscountForm({ ...discountForm, name: e.target.value })}
+            />
+            <TextField
+              label="Description"
+              fullWidth
+              multiline
+              rows={2}
+              value={discountForm.description}
+              onChange={(e) => setDiscountForm({ ...discountForm, description: e.target.value })}
+            />
+
+            {/* Trigger type */}
+            <Box>
+              <Typography variant="subtitle2" gutterBottom>Trigger Type</Typography>
+              <Stack direction="row" spacing={1}>
+                <Button
+                  variant={discountForm.isAutomatic ? 'contained' : 'outlined'}
+                  size="small"
+                  onClick={() => setDiscountForm({ ...discountForm, isAutomatic: true, code: '' })}
+                >
+                  Automatic
+                </Button>
+                <Button
+                  variant={!discountForm.isAutomatic ? 'contained' : 'outlined'}
+                  size="small"
+                  onClick={() => setDiscountForm({ ...discountForm, isAutomatic: false })}
+                >
+                  Coupon Code
+                </Button>
+              </Stack>
+            </Box>
+
+            {!discountForm.isAutomatic && (
+              <TextField
+                label="Coupon Code"
+                fullWidth
+                required
+                value={discountForm.code}
+                onChange={(e) => setDiscountForm({ ...discountForm, code: e.target.value.toUpperCase() })}
+                helperText="Users enter this code at checkout"
+              />
+            )}
+
+            {/* Discount type and value */}
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>Discount Type</Typography>
+                <Stack direction="row" spacing={1}>
+                  <Button
+                    variant={discountForm.discountType === 'FLAT' ? 'contained' : 'outlined'}
+                    size="small"
+                    onClick={() => setDiscountForm({ ...discountForm, discountType: 'FLAT' })}
+                  >
+                    Flat ($)
+                  </Button>
+                  <Button
+                    variant={discountForm.discountType === 'PERCENTAGE' ? 'contained' : 'outlined'}
+                    size="small"
+                    onClick={() => setDiscountForm({ ...discountForm, discountType: 'PERCENTAGE' })}
+                  >
+                    Percentage (%)
+                  </Button>
+                </Stack>
+              </Box>
+              <TextField
+                label={discountForm.discountType === 'FLAT' ? 'Amount ($)' : 'Percentage (%)'}
+                type="number"
+                size="small"
+                value={discountForm.value}
+                onChange={(e) => setDiscountForm({ ...discountForm, value: e.target.value })}
+                inputProps={{ min: 0, max: discountForm.discountType === 'PERCENTAGE' ? 100 : undefined, step: '0.01' }}
+                sx={{ width: 140, mt: 'auto' }}
+              />
+            </Box>
+
+            {/* Active / validity */}
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={discountForm.isActive}
+                  onChange={(e) => setDiscountForm({ ...discountForm, isActive: e.target.checked })}
+                />
+              }
+              label="Active"
+            />
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <TextField
+                label="Start Date"
+                type="date"
+                size="small"
+                value={discountForm.startDate}
+                onChange={(e) => setDiscountForm({ ...discountForm, startDate: e.target.value })}
+                InputLabelProps={{ shrink: true }}
+                helperText="Optional"
+                sx={{ flex: 1 }}
+              />
+              <TextField
+                label="End Date"
+                type="date"
+                size="small"
+                value={discountForm.endDate}
+                onChange={(e) => setDiscountForm({ ...discountForm, endDate: e.target.value })}
+                InputLabelProps={{ shrink: true }}
+                helperText="Optional"
+                sx={{ flex: 1 }}
+              />
+            </Box>
+
+            {/* Conditions (automatic only) */}
+            {discountForm.isAutomatic && (
+              <Box>
+                <Typography variant="subtitle2" gutterBottom>Conditions</Typography>
+                <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 1 }}>
+                  All set conditions must be met. Leave empty for no restriction.
+                </Typography>
+                <Stack spacing={2}>
+                  {products.filter(p => !p.isArchived).length > 0 && (
+                    <Box>
+                      <Typography variant="caption" fontWeight={600}>Products (ad must use one of these)</Typography>
+                      <Stack>
+                        {products.filter(p => !p.isArchived).map(p => (
+                          <FormControlLabel
+                            key={p.id}
+                            control={
+                              <Checkbox
+                                size="small"
+                                checked={discountForm.conditionProductIds.includes(p.id)}
+                                onChange={(e) => {
+                                  const ids = e.target.checked
+                                    ? [...discountForm.conditionProductIds, p.id]
+                                    : discountForm.conditionProductIds.filter(id => id !== p.id)
+                                  setDiscountForm({ ...discountForm, conditionProductIds: ids })
+                                }}
+                              />
+                            }
+                            label={<Typography variant="body2">{p.name}</Typography>}
+                          />
+                        ))}
+                      </Stack>
+                    </Box>
+                  )}
+
+                  {placements.filter(p => !p.isArchived).length > 0 && (
+                    <Box>
+                      <Typography variant="caption" fontWeight={600}>Placements (at least one must be selected)</Typography>
+                      <Stack>
+                        {placements.filter(p => !p.isArchived).map(p => (
+                          <FormControlLabel
+                            key={p.id}
+                            control={
+                              <Checkbox
+                                size="small"
+                                checked={discountForm.conditionPlacementIds.includes(p.id)}
+                                onChange={(e) => {
+                                  const ids = e.target.checked
+                                    ? [...discountForm.conditionPlacementIds, p.id]
+                                    : discountForm.conditionPlacementIds.filter(id => id !== p.id)
+                                  setDiscountForm({ ...discountForm, conditionPlacementIds: ids })
+                                }}
+                              />
+                            }
+                            label={<Typography variant="body2">{p.name}</Typography>}
+                          />
+                        ))}
+                      </Stack>
+                    </Box>
+                  )}
+
+                  {sections.filter(s => !s.isArchived).length > 0 && (
+                    <Box>
+                      <Typography variant="caption" fontWeight={600}>Sections (at least one must be selected)</Typography>
+                      <Stack>
+                        {sections.filter(s => !s.isArchived).map(s => (
+                          <FormControlLabel
+                            key={s.id}
+                            control={
+                              <Checkbox
+                                size="small"
+                                checked={discountForm.conditionSectionIds.includes(s.id)}
+                                onChange={(e) => {
+                                  const ids = e.target.checked
+                                    ? [...discountForm.conditionSectionIds, s.id]
+                                    : discountForm.conditionSectionIds.filter(id => id !== s.id)
+                                  setDiscountForm({ ...discountForm, conditionSectionIds: ids })
+                                }}
+                              />
+                            }
+                            label={<Typography variant="body2">{s.name}</Typography>}
+                          />
+                        ))}
+                      </Stack>
+                    </Box>
+                  )}
+
+                  <TextField
+                    label="Minimum Placements"
+                    type="number"
+                    size="small"
+                    value={discountForm.conditionMinPlacements}
+                    onChange={(e) => setDiscountForm({ ...discountForm, conditionMinPlacements: e.target.value })}
+                    inputProps={{ min: 0, step: 1 }}
+                    helperText="Discount applies when user selects this many placements (0 = no minimum)"
+                    sx={{ maxWidth: 260 }}
+                  />
+                </Stack>
+              </Box>
+            )}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDiscountDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" onClick={handleSaveDiscount} disabled={isLoading}>
+            {editingDiscount ? 'Save Changes' : 'Create Discount'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Delete Discount Confirm Dialog */}
+      <Dialog open={deleteDiscountDialogOpen} onClose={() => setDeleteDiscountDialogOpen(false)}>
+        <DialogTitle>Delete Discount</DialogTitle>
+        <DialogContent>
+          <Typography>Are you sure you want to delete this discount? This cannot be undone.</Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDeleteDiscountDialogOpen(false)}>Cancel</Button>
+          <Button variant="contained" color="error" onClick={handleDeleteDiscount} disabled={isLoading}>
+            Delete
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Message Dialog */}
       <Dialog open={messageDialogOpen} onClose={() => setMessageDialogOpen(false)} maxWidth="sm" fullWidth>

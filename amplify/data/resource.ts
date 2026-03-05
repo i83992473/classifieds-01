@@ -20,6 +20,7 @@ const schema = a.schema({
     placementIds: a.string().array(),
     sectionIds: a.string().array(),
     subSectionIds: a.string().array(),
+    appliedDiscounts: a.string(), // JSON snapshot: [{id, name, code, discountType, value, computedAmount}]
   }).authorization(allow => [allow.owner()]),
 
   User: a.model({
@@ -125,6 +126,21 @@ const schema = a.schema({
     sortOrder: a.integer().default(0),
     addonFeeOverride: a.float(),
     isArchived: a.boolean().default(false),
+  }).authorization(allow => [
+    allow.owner(),
+    allow.authenticated().to(['read']),
+  ]),
+
+  Discount: a.model({
+    name: a.string().required(),
+    description: a.string(),
+    code: a.string(),              // null = automatic, non-null = coupon code
+    discountType: a.string().required(), // 'FLAT' | 'PERCENTAGE'
+    value: a.float().required(),
+    isActive: a.boolean().default(true),
+    startDate: a.string(),         // ISO date string, optional
+    endDate: a.string(),           // ISO date string, optional
+    conditions: a.string(),        // JSON: { productIds, placementIds, sectionIds, minPlacements }
   }).authorization(allow => [
     allow.owner(),
     allow.authenticated().to(['read']),
