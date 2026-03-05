@@ -3516,6 +3516,15 @@ function App() {
                     </Button>
                   </Stack>
 
+                  {/* Nothing selected hint */}
+                  {!selectedTextBlock && !selectedImageBlock && blocks.length > 0 && (
+                    <Box sx={{ mt: 3, textAlign: 'center', color: 'text.secondary', px: 1 }}>
+                      <Typography variant="body2" gutterBottom>
+                        Click on a text or image block in the ad preview to select it and edit its properties here.
+                      </Typography>
+                    </Box>
+                  )}
+
                   {/* Text Block Editor */}
                   {selectedTextBlock && (
                     <Paper elevation={1} sx={{ p: 2, mt: 2, mb: 2, bgcolor: 'background.paper' }}>
@@ -4109,6 +4118,7 @@ function App() {
 
       {/* Preview Area */}
       <Box
+        onClick={() => setSelectedBlockId(null)}
         sx={{
           ml: `${sidebarWidth}px`,
           width: `calc(100vw - ${sidebarWidth}px)`,
