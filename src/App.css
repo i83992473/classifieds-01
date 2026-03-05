@@ -37,7 +37,8 @@
 
 .block-image img {
   max-width: 100%;
-  max-height: 200px;
+  width: auto;
+  height: auto;
   display: block;
   margin: 0;
   padding: 0;
