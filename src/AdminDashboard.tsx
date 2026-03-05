@@ -4061,131 +4061,120 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                 
                 <Stack spacing={2}>
                   {/* Base Price */}
-                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'center' }}>
                     <Box sx={{ minWidth: 220 }}>
                       <Typography variant="subtitle1" fontWeight={600}>Base Price</Typography>
                       <Typography variant="caption" color="text.secondary">Base price for this product</Typography>
                     </Box>
-                    <Box>
-                      <TextField
-                        type="text"
-                        size="small"
-                        label="Base price ($)"
-                        value={localBasePrice}
-                        onChange={(e) => {
-                          const validated = validateCurrencyInput(e.target.value)
-                          setLocalBasePrice(validated)
-                        }}
-                        disabled={!selectedPricingProduct}
-                      />
-                    </Box>
+                    <Box sx={{ flex: 1 }} />
+                    <TextField
+                      type="text"
+                      size="small"
+                      label="Base price ($)"
+                      value={localBasePrice}
+                      onChange={(e) => {
+                        const validated = validateCurrencyInput(e.target.value)
+                        setLocalBasePrice(validated)
+                      }}
+                      disabled={!selectedPricingProduct}
+                      sx={{ width: 140 }}
+                    />
                   </Paper>
 
                   {/* Price Per Day */}
-                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'center' }}>
                     <Box sx={{ minWidth: 220 }}>
                       <Typography variant="subtitle1" fontWeight={600}>Price Per Day</Typography>
                       <Typography variant="caption" color="text.secondary">Additional price charged per day the ad runs</Typography>
                     </Box>
-                    <Box>
-                      <TextField
-                        type="text"
-                        size="small"
-                        label="Price per day ($)"
-                        value={localPricingValues[`pricePerDay_${selectedPricingProduct}`] || '0.00'}
-                        onChange={(e) => {
-                          const validated = validateCurrencyInput(e.target.value)
-                          setLocalPricingValues({
-                            ...localPricingValues,
-                            [`pricePerDay_${selectedPricingProduct}`]: validated
-                          })
-                        }}
-                        disabled={!selectedPricingProduct}
-                      />
-                    </Box>
+                    <Box sx={{ flex: 1 }} />
+                    <TextField
+                      type="text"
+                      size="small"
+                      label="Price per day ($)"
+                      value={localPricingValues[`pricePerDay_${selectedPricingProduct}`] || '0.00'}
+                      onChange={(e) => {
+                        const validated = validateCurrencyInput(e.target.value)
+                        setLocalPricingValues({ ...localPricingValues, [`pricePerDay_${selectedPricingProduct}`]: validated })
+                      }}
+                      disabled={!selectedPricingProduct}
+                      sx={{ width: 140 }}
+                    />
                   </Paper>
 
                   {/* Line Count */}
-                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'center' }}>
                     <Box sx={{ minWidth: 220 }}>
                       <Typography variant="subtitle1" fontWeight={600}>Line Count</Typography>
                       <Typography variant="caption" color="text.secondary">Price charged for each line of text</Typography>
                     </Box>
-                    <Box>
-                      <TextField
-                        type="text"
-                        size="small"
-                        label="Price per line ($)"
-                        value={localPricingValues[`pricePerLine_${selectedPricingProduct}`] || '0.00'}
-                        onChange={(e) => {
-                          const validated = validateCurrencyInput(e.target.value)
-                          setLocalPricingValues({
-                            ...localPricingValues,
-                            [`pricePerLine_${selectedPricingProduct}`]: validated
-                          })
-                        }}
-                        disabled={!selectedPricingProduct}
-                      />
-                    </Box>
+                    <Box sx={{ flex: 1 }} />
+                    <TextField
+                      type="text"
+                      size="small"
+                      label="Price per line ($)"
+                      value={localPricingValues[`pricePerLine_${selectedPricingProduct}`] || '0.00'}
+                      onChange={(e) => {
+                        const validated = validateCurrencyInput(e.target.value)
+                        setLocalPricingValues({ ...localPricingValues, [`pricePerLine_${selectedPricingProduct}`]: validated })
+                      }}
+                      disabled={!selectedPricingProduct}
+                      sx={{ width: 140 }}
+                    />
                   </Paper>
 
                   {/* Word Count */}
-                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'center' }}>
                     <Box sx={{ minWidth: 220 }}>
                       <Typography variant="subtitle1" fontWeight={600}>Word Count</Typography>
                       <Typography variant="caption" color="text.secondary">Price charged for each word in text blocks</Typography>
                     </Box>
-                    <Box>
-                      <TextField
-                        type="text"
-                        size="small"
-                        label="Price per word ($)"
-                        value={localPricingValues[`pricePerWord_${selectedPricingProduct}`] || '0.00'}
-                        onChange={(e) => {
-                          const validated = validateCurrencyInput(e.target.value)
-                          setLocalPricingValues({
-                            ...localPricingValues,
-                            [`pricePerWord_${selectedPricingProduct}`]: validated
-                          })
-                        }}
-                        disabled={!selectedPricingProduct}
-                      />
-                    </Box>
+                    <Box sx={{ flex: 1 }} />
+                    <TextField
+                      type="text"
+                      size="small"
+                      label="Price per word ($)"
+                      value={localPricingValues[`pricePerWord_${selectedPricingProduct}`] || '0.00'}
+                      onChange={(e) => {
+                        const validated = validateCurrencyInput(e.target.value)
+                        setLocalPricingValues({ ...localPricingValues, [`pricePerWord_${selectedPricingProduct}`]: validated })
+                      }}
+                      disabled={!selectedPricingProduct}
+                      sx={{ width: 140 }}
+                    />
                   </Paper>
 
                   {/* Images */}
-                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'center' }}>
                     <Box sx={{ minWidth: 220 }}>
                       <Typography variant="subtitle1" fontWeight={600}>Images</Typography>
                       <Typography variant="caption" color="text.secondary">Price charged for each image in the ad</Typography>
                     </Box>
-                    <Box>
-                      <TextField
-                        type="text"
-                        size="small"
-                        label="Price per image ($)"
-                        value={localPricingValues[`pricePerImage_${selectedPricingProduct}`] || '0.00'}
-                        onChange={(e) => {
-                          const validated = validateCurrencyInput(e.target.value)
-                          setLocalPricingValues({
-                            ...localPricingValues,
-                            [`pricePerImage_${selectedPricingProduct}`]: validated
-                          })
-                        }}
-                        disabled={!selectedPricingProduct}
-                      />
-                    </Box>
+                    <Box sx={{ flex: 1 }} />
+                    <TextField
+                      type="text"
+                      size="small"
+                      label="Price per image ($)"
+                      value={localPricingValues[`pricePerImage_${selectedPricingProduct}`] || '0.00'}
+                      onChange={(e) => {
+                        const validated = validateCurrencyInput(e.target.value)
+                        setLocalPricingValues({ ...localPricingValues, [`pricePerImage_${selectedPricingProduct}`]: validated })
+                      }}
+                      disabled={!selectedPricingProduct}
+                      sx={{ width: 140 }}
+                    />
                   </Paper>
 
                   {/* Border Selection */}
-                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start' }}>
                     <Box sx={{ minWidth: 220 }}>
                       <Typography variant="subtitle1" fontWeight={600}>Border Selection</Typography>
                     </Box>
-                    <Stack spacing={1} sx={{ flex: 1 }}>
+                    <Box sx={{ flex: 1 }} />
+                    <Stack spacing={1}>
                       {['none', 'thin', 'thick', 'dashed'].map(borderType => (
-                        <Box key={borderType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                          <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{borderType}</Typography>
+                        <Box key={borderType} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <Typography variant="body2" sx={{ minWidth: 50, textAlign: 'right', textTransform: 'capitalize' }}>{borderType}</Typography>
                           <TextField
                             type="text"
                             size="small"
@@ -4193,13 +4182,10 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                             value={localPricingValues[`border_${borderType}_${selectedPricingProduct}`] || '0.00'}
                             onChange={(e) => {
                               const validated = validateCurrencyInput(e.target.value)
-                              setLocalPricingValues({
-                                ...localPricingValues,
-                                [`border_${borderType}_${selectedPricingProduct}`]: validated
-                              })
+                              setLocalPricingValues({ ...localPricingValues, [`border_${borderType}_${selectedPricingProduct}`]: validated })
                             }}
-                            sx={{ flex: 1 }}
                             disabled={!selectedPricingProduct}
+                            sx={{ width: 140 }}
                           />
                         </Box>
                       ))}
@@ -4207,14 +4193,15 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                   </Paper>
 
                   {/* Corner Options */}
-                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start' }}>
                     <Box sx={{ minWidth: 220 }}>
                       <Typography variant="subtitle1" fontWeight={600}>Corners</Typography>
                     </Box>
-                    <Stack spacing={1} sx={{ flex: 1 }}>
+                    <Box sx={{ flex: 1 }} />
+                    <Stack spacing={1}>
                       {['flat', 'rounded'].map(cornerType => (
-                        <Box key={cornerType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                          <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{cornerType}</Typography>
+                        <Box key={cornerType} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <Typography variant="body2" sx={{ minWidth: 60, textAlign: 'right', textTransform: 'capitalize' }}>{cornerType}</Typography>
                           <TextField
                             type="text"
                             size="small"
@@ -4222,13 +4209,10 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                             value={localPricingValues[`corner_${cornerType}_${selectedPricingProduct}`] || '0.00'}
                             onChange={(e) => {
                               const validated = validateCurrencyInput(e.target.value)
-                              setLocalPricingValues({
-                                ...localPricingValues,
-                                [`corner_${cornerType}_${selectedPricingProduct}`]: validated
-                              })
+                              setLocalPricingValues({ ...localPricingValues, [`corner_${cornerType}_${selectedPricingProduct}`]: validated })
                             }}
-                            sx={{ flex: 1 }}
                             disabled={!selectedPricingProduct}
+                            sx={{ width: 140 }}
                           />
                         </Box>
                       ))}
@@ -4236,14 +4220,15 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                   </Paper>
 
                   {/* Padding Options */}
-                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start' }}>
                     <Box sx={{ minWidth: 220 }}>
                       <Typography variant="subtitle1" fontWeight={600}>Padding</Typography>
                     </Box>
-                    <Stack spacing={1} sx={{ flex: 1 }}>
+                    <Box sx={{ flex: 1 }} />
+                    <Stack spacing={1}>
                       {['none', 'medium', 'large'].map(paddingType => (
-                        <Box key={paddingType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                          <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{paddingType}</Typography>
+                        <Box key={paddingType} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <Typography variant="body2" sx={{ minWidth: 55, textAlign: 'right', textTransform: 'capitalize' }}>{paddingType}</Typography>
                           <TextField
                             type="text"
                             size="small"
@@ -4251,13 +4236,10 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                             value={localPricingValues[`padding_${paddingType}_${selectedPricingProduct}`] || '0.00'}
                             onChange={(e) => {
                               const validated = validateCurrencyInput(e.target.value)
-                              setLocalPricingValues({
-                                ...localPricingValues,
-                                [`padding_${paddingType}_${selectedPricingProduct}`]: validated
-                              })
+                              setLocalPricingValues({ ...localPricingValues, [`padding_${paddingType}_${selectedPricingProduct}`]: validated })
                             }}
-                            sx={{ flex: 1 }}
                             disabled={!selectedPricingProduct}
+                            sx={{ width: 140 }}
                           />
                         </Box>
                       ))}
@@ -4265,18 +4247,19 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                   </Paper>
 
                   {/* Text Formatting */}
-                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start' }}>
                     <Box sx={{ minWidth: 220 }}>
                       <Typography variant="subtitle1" fontWeight={600}>Text Formatting</Typography>
                     </Box>
-                    <Stack spacing={1} sx={{ flex: 1 }}>
+                    <Box sx={{ flex: 1 }} />
+                    <Stack spacing={1}>
                       {[
-                        { key: 'pricePerBold', label: 'Bold Sections' },
-                        { key: 'pricePerItalic', label: 'Italic Sections' },
-                        { key: 'pricePerUnderline', label: 'Underline Sections' },
+                        { key: 'pricePerBold', label: 'Bold' },
+                        { key: 'pricePerItalic', label: 'Italic' },
+                        { key: 'pricePerUnderline', label: 'Underline' },
                       ].map(item => (
-                        <Box key={item.key} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                          <Typography sx={{ minWidth: 150 }}>{item.label}</Typography>
+                        <Box key={item.key} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <Typography variant="body2" sx={{ minWidth: 65, textAlign: 'right' }}>{item.label}</Typography>
                           <TextField
                             type="text"
                             size="small"
@@ -4284,13 +4267,10 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                             value={localPricingValues[`${item.key}_${selectedPricingProduct}`] || '0.00'}
                             onChange={(e) => {
                               const validated = validateCurrencyInput(e.target.value)
-                              setLocalPricingValues({
-                                ...localPricingValues,
-                                [`${item.key}_${selectedPricingProduct}`]: validated
-                              })
+                              setLocalPricingValues({ ...localPricingValues, [`${item.key}_${selectedPricingProduct}`]: validated })
                             }}
-                            sx={{ flex: 1 }}
                             disabled={!selectedPricingProduct}
+                            sx={{ width: 140 }}
                           />
                         </Box>
                       ))}
@@ -4298,14 +4278,15 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                   </Paper>
 
                   {/* Text Alignment */}
-                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start' }}>
                     <Box sx={{ minWidth: 220 }}>
                       <Typography variant="subtitle1" fontWeight={600}>Text Alignment</Typography>
                     </Box>
-                    <Stack spacing={1} sx={{ flex: 1 }}>
+                    <Box sx={{ flex: 1 }} />
+                    <Stack spacing={1}>
                       {['left', 'center', 'right', 'justify'].map(alignType => (
-                        <Box key={alignType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                          <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{alignType}</Typography>
+                        <Box key={alignType} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <Typography variant="body2" sx={{ minWidth: 50, textAlign: 'right', textTransform: 'capitalize' }}>{alignType}</Typography>
                           <TextField
                             type="text"
                             size="small"
@@ -4313,13 +4294,10 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                             value={localPricingValues[`alignment_${alignType}_${selectedPricingProduct}`] || '0.00'}
                             onChange={(e) => {
                               const validated = validateCurrencyInput(e.target.value)
-                              setLocalPricingValues({
-                                ...localPricingValues,
-                                [`alignment_${alignType}_${selectedPricingProduct}`]: validated
-                              })
+                              setLocalPricingValues({ ...localPricingValues, [`alignment_${alignType}_${selectedPricingProduct}`]: validated })
                             }}
-                            sx={{ flex: 1 }}
                             disabled={!selectedPricingProduct}
+                            sx={{ width: 140 }}
                           />
                         </Box>
                       ))}
@@ -4327,14 +4305,15 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                   </Paper>
 
                   {/* Text Size */}
-                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start' }}>
                     <Box sx={{ minWidth: 220 }}>
                       <Typography variant="subtitle1" fontWeight={600}>Text Size</Typography>
                     </Box>
-                    <Stack spacing={1} sx={{ flex: 1 }}>
+                    <Box sx={{ flex: 1 }} />
+                    <Stack spacing={1}>
                       {['small', 'medium', 'large'].map(sizeType => (
-                        <Box key={sizeType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                          <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{sizeType}</Typography>
+                        <Box key={sizeType} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <Typography variant="body2" sx={{ minWidth: 50, textAlign: 'right', textTransform: 'capitalize' }}>{sizeType}</Typography>
                           <TextField
                             type="text"
                             size="small"
@@ -4342,13 +4321,10 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                             value={localPricingValues[`size_${sizeType}_${selectedPricingProduct}`] || '0.00'}
                             onChange={(e) => {
                               const validated = validateCurrencyInput(e.target.value)
-                              setLocalPricingValues({
-                                ...localPricingValues,
-                                [`size_${sizeType}_${selectedPricingProduct}`]: validated
-                              })
+                              setLocalPricingValues({ ...localPricingValues, [`size_${sizeType}_${selectedPricingProduct}`]: validated })
                             }}
-                            sx={{ flex: 1 }}
                             disabled={!selectedPricingProduct}
+                            sx={{ width: 140 }}
                           />
                         </Box>
                       ))}
@@ -4356,14 +4332,15 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                   </Paper>
 
                   {/* Font */}
-                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start' }}>
                     <Box sx={{ minWidth: 220 }}>
                       <Typography variant="subtitle1" fontWeight={600}>Font</Typography>
                     </Box>
-                    <Stack spacing={1} sx={{ flex: 1 }}>
+                    <Box sx={{ flex: 1 }} />
+                    <Stack spacing={1}>
                       {['serif', 'sans-serif'].map(fontType => (
-                        <Box key={fontType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                          <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{fontType}</Typography>
+                        <Box key={fontType} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <Typography variant="body2" sx={{ minWidth: 70, textAlign: 'right', textTransform: 'capitalize' }}>{fontType}</Typography>
                           <TextField
                             type="text"
                             size="small"
@@ -4371,13 +4348,10 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                             value={localPricingValues[`font_${fontType}_${selectedPricingProduct}`] || '0.00'}
                             onChange={(e) => {
                               const validated = validateCurrencyInput(e.target.value)
-                              setLocalPricingValues({
-                                ...localPricingValues,
-                                [`font_${fontType}_${selectedPricingProduct}`]: validated
-                              })
+                              setLocalPricingValues({ ...localPricingValues, [`font_${fontType}_${selectedPricingProduct}`]: validated })
                             }}
-                            sx={{ flex: 1 }}
                             disabled={!selectedPricingProduct}
+                            sx={{ width: 140 }}
                           />
                         </Box>
                       ))}
@@ -4385,14 +4359,15 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                   </Paper>
 
                   {/* Text Highlight */}
-                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start', gap: 3 }}>
+                  <Paper variant="outlined" sx={{ p: 2, display: 'flex', alignItems: 'flex-start' }}>
                     <Box sx={{ minWidth: 220 }}>
                       <Typography variant="subtitle1" fontWeight={600}>Text Highlight</Typography>
                     </Box>
-                    <Stack spacing={1} sx={{ flex: 1 }}>
+                    <Box sx={{ flex: 1 }} />
+                    <Stack spacing={1}>
                       {['none', 'black', 'gray'].map(highlightType => (
-                        <Box key={highlightType} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                          <Typography sx={{ minWidth: 100, textTransform: 'capitalize' }}>{highlightType}</Typography>
+                        <Box key={highlightType} sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                          <Typography variant="body2" sx={{ minWidth: 40, textAlign: 'right', textTransform: 'capitalize' }}>{highlightType}</Typography>
                           <TextField
                             type="text"
                             size="small"
@@ -4400,13 +4375,10 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                             value={localPricingValues[`highlight_${highlightType}_${selectedPricingProduct}`] || '0.00'}
                             onChange={(e) => {
                               const validated = validateCurrencyInput(e.target.value)
-                              setLocalPricingValues({
-                                ...localPricingValues,
-                                [`highlight_${highlightType}_${selectedPricingProduct}`]: validated
-                              })
+                              setLocalPricingValues({ ...localPricingValues, [`highlight_${highlightType}_${selectedPricingProduct}`]: validated })
                             }}
-                            sx={{ flex: 1 }}
                             disabled={!selectedPricingProduct}
+                            sx={{ width: 140 }}
                           />
                         </Box>
                       ))}
