@@ -30,7 +30,6 @@ const greyscaleTheme = createTheme({
     components: {
       authenticator: {
         router: {
-          borderRadius: { value: '16px' },
           borderColor: { value: '#c3c7cc' },
           boxShadow: { value: '0 14px 40px rgba(29, 31, 34, 0.08)' },
         },
