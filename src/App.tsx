@@ -4326,14 +4326,15 @@ function App() {
                       width: '100%',
                     }}
                   >
-                    <img 
-                      src={block.src} 
-                      alt="Ad" 
+                    <img
+                      src={block.src}
+                      alt="Ad"
                       crossOrigin="anonymous"
                       loading="eager"
                       style={{
                         display: 'block',
-                        width: '100%',
+                        width: 'auto',
+                        maxWidth: '100%',
                         height: 'auto',
                         margin: 0,
                         padding: 0,
