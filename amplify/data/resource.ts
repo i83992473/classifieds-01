@@ -157,7 +157,8 @@ const schema = a.schema({
     archived: a.boolean().default(false),
     important: a.boolean().default(false),
     sentAt: a.datetime(),
-  }).authorization(allow => [allow.owner()]),
+    owners: a.string().array(), // [senderId, recipientId] — both parties can read/update
+  }).authorization(allow => [allow.ownersDefinedIn('owners')]),
 })
 
 export type Schema = ClientSchema<typeof schema>

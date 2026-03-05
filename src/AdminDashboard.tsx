@@ -1527,7 +1527,8 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
               recipientEmail: userResult.data.getUser.email,
               subject: `Ad "${adTitle}" ${statusMessages[status]}`,
               body: `Your ad "${adTitle}" ${statusMessages[status]}.`,
-              read: false
+              read: false,
+              owners: [user?.userId || '', userResult.data.getUser.id].filter(Boolean),
             }
           },
           authMode: 'userPool'
@@ -2202,7 +2203,8 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
             recipientEmail: messageRecipient.email,
             subject: messageSubject,
             body: messageBody,
-            read: false
+            read: false,
+            owners: [user?.userId, messageRecipient.id].filter(Boolean),
           }
         },
         authMode: 'userPool'

@@ -226,7 +226,8 @@ export default function MessagesDialog({ open, onClose, unreadCount, onUnreadCou
             recipientEmail: selectedMessage.senderEmail,
             subject: `Re: ${selectedMessage.subject || 'No Subject'}`,
             body: replyBody,
-            read: false
+            read: false,
+            owners: [user?.userId, selectedMessage.senderId].filter(Boolean),
           }
         },
         authMode: 'userPool'

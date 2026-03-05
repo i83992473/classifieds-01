@@ -1493,6 +1493,7 @@ function App() {
                 subject: `Ad "${adTitle}" submitted for approval`,
                 body: `Ad "${adTitle}" has been submitted for approval.\n\nAd ID: ${currentAdId}`,
                 read: false,
+                owners: [user?.userId || '', admin.id].filter(Boolean),
               }
             },
             authMode: 'userPool'
