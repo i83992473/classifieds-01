@@ -4,4 +4,16 @@ export declare const deleteAd: string;
 export declare const createUser: string;
 export declare const updateUser: string;
 export declare const createMessage: string;
+export declare const createSection: string;
+export declare const updateSection: string;
+export declare const deleteSection: string;
+export declare const createSubSection: string;
+export declare const updateSubSection: string;
+export declare const deleteSubSection: string;
+export declare const createProductSection: string;
+export declare const updateProductSection: string;
+export declare const deleteProductSection: string;
+export declare const createSectionSubSection: string;
+export declare const updateSectionSubSection: string;
+export declare const deleteSectionSubSection: string;
 

@@ -76,7 +76,7 @@ import './App.css'
 
 // Import GraphQL operations
 import { createAd, updateAd, deleteAd, updateUser, createMessage } from './graphql/mutations'
-import { listAds, getAd, listUsers, listProducts, getUser, listPlacements, listProductPlacements } from './graphql/queries'
+import { listAds, getAd, listUsers, listProducts, getUser, listPlacements, listProductPlacements, listSections, listSubSections, listProductSections, listSectionSubSections } from './graphql/queries'
 
 const getUserRecordQuery = /* GraphQL */ `
   query GetUserRecord($id: ID!) {
@@ -195,6 +195,8 @@ interface Ad {
   createdAt?: string;
   updatedAt?: string;
   placementIds?: string[];
+  sectionIds?: string[];
+  subSectionIds?: string[];
 }
 
 interface Placement {
@@ -211,6 +213,25 @@ interface ResolvedPlacement {
   name: string;
   description?: string;
   effectiveFee: number; // addonFeeOverride ?? defaultAddonFee
+}
+
+// Resolved section — merged Section + ProductSection, effective fee computed
+interface ResolvedSection {
+  id: string;           // Section.id — stored in Ad.sectionIds
+  productSectionId: string;
+  name: string;
+  effectiveFee: number; // addonFeeOverride ?? defaultAddonFee
+  sortOrder: number;
+}
+
+// Resolved sub-section — merged SubSection + SectionSubSection, effective fee computed
+interface ResolvedSubSection {
+  id: string;           // SubSection.id — stored in Ad.subSectionIds
+  sectionSubSectionId: string;
+  sectionId: string;
+  name: string;
+  effectiveFee: number;
+  sortOrder: number;
 }
 
 const SIDEBAR_WIDTH = 320;
@@ -257,6 +278,10 @@ function App() {
   const [selectedProduct, setSelectedProduct] = useState<string>('')
   const [placements, setPlacements] = useState<ResolvedPlacement[]>([])
   const [selectedPlacements, setSelectedPlacements] = useState<string[]>([])
+  const [sections, setSections] = useState<ResolvedSection[]>([])
+  const [selectedSections, setSelectedSections] = useState<string[]>([])
+  const [subSections, setSubSections] = useState<ResolvedSubSection[]>([])
+  const [selectedSubSections, setSelectedSubSections] = useState<string[]>([])
 
   // Admin and messaging state
   const [showAdminDashboard, setShowAdminDashboard] = useState(false)
@@ -563,6 +588,80 @@ function App() {
     }
   }
 
+  const loadSectionsForProduct = async (productId: string) => {
+    if (!productId) { setSections([]); return }
+    try {
+      const [psResult, globalResult] = await Promise.all([
+        client.graphql({
+          query: listProductSections,
+          variables: { filter: { productId: { eq: productId } } },
+          authMode: 'userPool'
+        }) as Promise<{ data: { listProductSections: { items: Array<{ id: string; sectionId: string; sortOrder: number; addonFeeOverride?: number; isArchived: boolean }> } } }>,
+        client.graphql({
+          query: listSections,
+          authMode: 'userPool'
+        }) as Promise<{ data: { listSections: { items: Array<{ id: string; name: string; defaultAddonFee: number; isArchived: boolean }> } } }>,
+      ])
+      const productSections = (psResult.data.listProductSections.items || []).filter(ps => !ps.isArchived)
+      const globalSections = globalResult.data.listSections.items || []
+      const resolved: ResolvedSection[] = productSections
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map(ps => {
+          const global = globalSections.find(s => s.id === ps.sectionId)
+          return {
+            id: ps.sectionId,
+            productSectionId: ps.id,
+            name: global?.name ?? ps.sectionId,
+            effectiveFee: ps.addonFeeOverride ?? global?.defaultAddonFee ?? 0,
+            sortOrder: ps.sortOrder,
+          }
+        })
+      setSections(resolved)
+    } catch (error) {
+      console.error('Error loading sections:', error)
+      setSections([])
+    }
+  }
+
+  const loadSubSectionsForSections = async (sectionIds: string[]) => {
+    if (!sectionIds.length) { setSubSections([]); return }
+    try {
+      // Fetch SectionSubSections for all selected sections and global SubSections in parallel
+      const [ssResults, globalResult] = await Promise.all([
+        Promise.all(sectionIds.map(sid =>
+          client.graphql({
+            query: listSectionSubSections,
+            variables: { filter: { sectionId: { eq: sid } } },
+            authMode: 'userPool'
+          }) as Promise<{ data: { listSectionSubSections: { items: Array<{ id: string; sectionId: string; subSectionId: string; sortOrder: number; addonFeeOverride?: number; isArchived: boolean }> } } }>
+        )),
+        client.graphql({
+          query: listSubSections,
+          authMode: 'userPool'
+        }) as Promise<{ data: { listSubSections: { items: Array<{ id: string; name: string; defaultAddonFee: number; isArchived: boolean }> } } }>,
+      ])
+      const allLinks = ssResults.flatMap(r => (r.data.listSectionSubSections.items || []).filter(ss => !ss.isArchived))
+      const globalSubSections = globalResult.data.listSubSections.items || []
+      const resolved: ResolvedSubSection[] = allLinks
+        .sort((a, b) => a.sortOrder - b.sortOrder)
+        .map(ss => {
+          const global = globalSubSections.find(s => s.id === ss.subSectionId)
+          return {
+            id: ss.subSectionId,
+            sectionSubSectionId: ss.id,
+            sectionId: ss.sectionId,
+            name: global?.name ?? ss.subSectionId,
+            effectiveFee: ss.addonFeeOverride ?? global?.defaultAddonFee ?? 0,
+            sortOrder: ss.sortOrder,
+          }
+        })
+      setSubSections(resolved)
+    } catch (error) {
+      console.error('Error loading sub-sections:', error)
+      setSubSections([])
+    }
+  }
+
   // Auto-select first product when creating new ad and products are available
   useEffect(() => {
     if (!currentAdId && products.length > 0 && !selectedProduct) {
@@ -572,6 +671,7 @@ function App() {
       // Update ad title with product name
       const dateStr = new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
       setAdTitle(`${firstProduct.name}-${dateStr}`)
+      loadSectionsForProduct(firstProduct.id)
     }
   }, [products.length, currentAdId]) // Only depend on products.length and currentAdId to avoid loops
   
@@ -1033,6 +1133,8 @@ function App() {
         productName,
         totalPrice,
         placementIds: selectedPlacements.length > 0 ? selectedPlacements : undefined,
+        sectionIds: selectedSections.length > 0 ? selectedSections : undefined,
+        subSectionIds: selectedSubSections.length > 0 ? selectedSubSections : undefined,
       }
       
       if (currentAdId) {
@@ -1395,11 +1497,19 @@ function App() {
           if (matchingProduct) {
             setSelectedProduct(matchingProduct.id)
             await loadPlacementsForProduct(matchingProduct.id)
+            await loadSectionsForProduct(matchingProduct.id)
           }
         }
 
         // Restore placement selections
         setSelectedPlacements(ad.placementIds || [])
+        // Restore section and sub-section selections
+        const restoredSectionIds = ad.sectionIds || []
+        setSelectedSections(restoredSectionIds)
+        setSelectedSubSections(ad.subSectionIds || [])
+        if (restoredSectionIds.length > 0) {
+          await loadSubSectionsForSections(restoredSectionIds)
+        }
         
         // Restore approval status
         setAdApproved(ad.approved || false)
@@ -1459,12 +1569,17 @@ function App() {
     // Reset approval status
     setAdApproved(false)
     setAdStatus('DRAFT')
-    // Reset placements
+    // Reset placements and sections
     setSelectedPlacements([])
+    setSelectedSections([])
+    setSelectedSubSections([])
+    setSubSections([])
     if (firstProduct) {
       loadPlacementsForProduct(firstProduct.id)
+      loadSectionsForProduct(firstProduct.id)
     } else {
       setPlacements([])
+      setSections([])
     }
   }
 
@@ -1871,8 +1986,14 @@ function App() {
     const placementFees = placements
       .filter(p => selectedPlacements.includes(p.id))
       .reduce((sum, p) => sum + (p.effectiveFee || 0), 0)
+    const sectionFees = sections
+      .filter(s => selectedSections.includes(s.id))
+      .reduce((sum, s) => sum + (s.effectiveFee || 0), 0)
+    const subSectionFees = subSections
+      .filter(ss => selectedSubSections.includes(ss.id))
+      .reduce((sum, ss) => sum + (ss.effectiveFee || 0), 0)
 
-    const subtotal = wordPrice + linePrice + imagePrice + decorationPrice + highlightPrice + productPrice + placementFees
+    const subtotal = wordPrice + linePrice + imagePrice + decorationPrice + highlightPrice + productPrice + placementFees + sectionFees + subSectionFees
 
     return {
       productPrice,
@@ -1882,6 +2003,8 @@ function App() {
       decorationPrice,
       highlightPrice,
       placementFees,
+      sectionFees,
+      subSectionFees,
       subtotal,
     }
   }
@@ -2885,9 +3008,13 @@ function App() {
                             const product = products.find(p => p.id === e.target.value)
                             setAdTitle(`${product?.name || 'Product'}-${dateStr}`)
                           }
-                          // Load placements for newly selected product
+                          // Load placements and sections for newly selected product
                           setSelectedPlacements([])
+                          setSelectedSections([])
+                          setSelectedSubSections([])
+                          setSubSections([])
                           loadPlacementsForProduct(e.target.value)
+                          loadSectionsForProduct(e.target.value)
                         }}
                         renderValue={(value) => {
                           if (!value || value === '') {
@@ -2905,6 +3032,95 @@ function App() {
                       </Select>
                     </FormControl>
                   </Box>
+
+                  {/* Sections Multi-Select */}
+                  {sections.length > 0 && (
+                    <Box mb={2}>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                        Sections
+                      </Typography>
+                      <FormGroup>
+                        {sections.map(section => (
+                          <FormControlLabel
+                            key={section.id}
+                            control={
+                              <Checkbox
+                                size="small"
+                                checked={selectedSections.includes(section.id)}
+                                onChange={(e) => {
+                                  const newSelected = e.target.checked
+                                    ? [...selectedSections, section.id]
+                                    : selectedSections.filter(id => id !== section.id)
+                                  setSelectedSections(newSelected)
+                                  // Reload sub-sections for selected sections
+                                  loadSubSectionsForSections(newSelected)
+                                  // Clear sub-section selections that no longer have a parent section selected
+                                  if (!e.target.checked) {
+                                    setSelectedSubSections(prev =>
+                                      prev.filter(ssId => {
+                                        // Keep only sub-sections that belong to still-selected sections
+                                        const subsForSection = subSections.filter(ss => ss.sectionId === section.id).map(ss => ss.id)
+                                        return !subsForSection.includes(ssId)
+                                      })
+                                    )
+                                  }
+                                }}
+                              />
+                            }
+                            label={
+                              <Typography variant="body2">
+                                {section.name}
+                                {section.effectiveFee > 0 && (
+                                  <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+                                    (+${section.effectiveFee.toFixed(2)})
+                                  </Typography>
+                                )}
+                              </Typography>
+                            }
+                          />
+                        ))}
+                      </FormGroup>
+                    </Box>
+                  )}
+
+                  {/* Sub-Sections Multi-Select */}
+                  {subSections.length > 0 && selectedSections.length > 0 && (
+                    <Box mb={2}>
+                      <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 0.5 }}>
+                        Sub-Sections
+                      </Typography>
+                      <FormGroup>
+                        {subSections.filter(ss => selectedSections.includes(ss.sectionId)).map(ss => (
+                          <FormControlLabel
+                            key={ss.id}
+                            control={
+                              <Checkbox
+                                size="small"
+                                checked={selectedSubSections.includes(ss.id)}
+                                onChange={(e) => {
+                                  setSelectedSubSections(prev =>
+                                    e.target.checked
+                                      ? [...prev, ss.id]
+                                      : prev.filter(id => id !== ss.id)
+                                  )
+                                }}
+                              />
+                            }
+                            label={
+                              <Typography variant="body2">
+                                {ss.name}
+                                {ss.effectiveFee > 0 && (
+                                  <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 0.5 }}>
+                                    (+${ss.effectiveFee.toFixed(2)})
+                                  </Typography>
+                                )}
+                              </Typography>
+                            }
+                          />
+                        ))}
+                      </FormGroup>
+                    </Box>
+                  )}
 
                   {/* Placement Multi-Select */}
                   {placements.length > 0 && (
@@ -3602,6 +3818,38 @@ function App() {
                             </TableRow>
                           )}
                           
+                          {/* Section Fees */}
+                          {selectedSections.length > 0 && pricing.sectionFees > 0 && (
+                            <TableRow>
+                              <TableCell sx={{ borderBottom: 'none', pl: 4 }}>
+                                <Typography variant="body2" color="text.secondary">
+                                  Sections ({sections.filter(s => selectedSections.includes(s.id)).map(s => s.name).join(', ')})
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="right" sx={{ borderBottom: 'none' }}>
+                                <Typography variant="body2" fontWeight={500}>
+                                  ${pricing.sectionFees.toFixed(2)}
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          )}
+
+                          {/* Sub-Section Fees */}
+                          {selectedSubSections.length > 0 && pricing.subSectionFees > 0 && (
+                            <TableRow>
+                              <TableCell sx={{ borderBottom: 'none', pl: 4 }}>
+                                <Typography variant="body2" color="text.secondary">
+                                  Sub-Sections ({subSections.filter(ss => selectedSubSections.includes(ss.id)).map(ss => ss.name).join(', ')})
+                                </Typography>
+                              </TableCell>
+                              <TableCell align="right" sx={{ borderBottom: 'none' }}>
+                                <Typography variant="body2" fontWeight={500}>
+                                  ${pricing.subSectionFees.toFixed(2)}
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          )}
+
                           {/* Placement Fees */}
                           {selectedPlacements.length > 0 && pricing.placementFees > 0 && (
                             <TableRow>

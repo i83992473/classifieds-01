@@ -18,6 +18,8 @@ const schema = a.schema({
     owner: a.string(),
     createdAt: a.datetime(),
     placementIds: a.string().array(),
+    sectionIds: a.string().array(),
+    subSectionIds: a.string().array(),
   }).authorization(allow => [allow.owner()]),
 
   User: a.model({
@@ -79,6 +81,48 @@ const schema = a.schema({
   ProductPlacement: a.model({
     productId: a.string().required(),
     placementId: a.string().required(),
+    addonFeeOverride: a.float(),
+    isArchived: a.boolean().default(false),
+  }).authorization(allow => [
+    allow.owner(),
+    allow.authenticated().to(['read']),
+  ]),
+
+  Section: a.model({
+    name: a.string().required(),
+    description: a.string(),
+    defaultAddonFee: a.float().default(0),
+    isArchived: a.boolean().default(false),
+  }).authorization(allow => [
+    allow.owner(),
+    allow.authenticated().to(['read']),
+  ]),
+
+  SubSection: a.model({
+    name: a.string().required(),
+    description: a.string(),
+    defaultAddonFee: a.float().default(0),
+    isArchived: a.boolean().default(false),
+  }).authorization(allow => [
+    allow.owner(),
+    allow.authenticated().to(['read']),
+  ]),
+
+  ProductSection: a.model({
+    productId: a.string().required(),
+    sectionId: a.string().required(),
+    sortOrder: a.integer().default(0),
+    addonFeeOverride: a.float(),
+    isArchived: a.boolean().default(false),
+  }).authorization(allow => [
+    allow.owner(),
+    allow.authenticated().to(['read']),
+  ]),
+
+  SectionSubSection: a.model({
+    sectionId: a.string().required(),
+    subSectionId: a.string().required(),
+    sortOrder: a.integer().default(0),
     addonFeeOverride: a.float(),
     isArchived: a.boolean().default(false),
   }).authorization(allow => [

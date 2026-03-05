@@ -12,4 +12,12 @@ export declare const getPlacement: string;
 export declare const listPlacements: string;
 export declare const getProductPlacement: string;
 export declare const listProductPlacements: string;
+export declare const getSection: string;
+export declare const listSections: string;
+export declare const getSubSection: string;
+export declare const listSubSections: string;
+export declare const getProductSection: string;
+export declare const listProductSections: string;
+export declare const getSectionSubSection: string;
+export declare const listSectionSubSections: string;
 

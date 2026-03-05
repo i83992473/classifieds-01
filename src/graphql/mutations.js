@@ -22,6 +22,8 @@ export const createAd = /* GraphQL */ `
       createdAt
       updatedAt
       placementIds
+      sectionIds
+      subSectionIds
       __typename
     }
   }
@@ -47,6 +49,8 @@ export const updateAd = /* GraphQL */ `
       createdAt
       updatedAt
       placementIds
+      sectionIds
+      subSectionIds
       __typename
     }
   }
@@ -421,6 +425,154 @@ export const deleteProductPlacement = /* GraphQL */ `
       isArchived
       createdAt
       updatedAt
+      __typename
+    }
+  }
+`;
+export const createSection = /* GraphQL */ `
+  mutation CreateSection($input: CreateSectionInput!, $condition: ModelSectionConditionInput) {
+    createSection(input: $input, condition: $condition) {
+      id
+      name
+      description
+      defaultAddonFee
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+  }
+`;
+export const updateSection = /* GraphQL */ `
+  mutation UpdateSection($input: UpdateSectionInput!, $condition: ModelSectionConditionInput) {
+    updateSection(input: $input, condition: $condition) {
+      id
+      name
+      description
+      defaultAddonFee
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+  }
+`;
+export const deleteSection = /* GraphQL */ `
+  mutation DeleteSection($input: DeleteSectionInput!, $condition: ModelSectionConditionInput) {
+    deleteSection(input: $input, condition: $condition) {
+      id
+      __typename
+    }
+  }
+`;
+export const createSubSection = /* GraphQL */ `
+  mutation CreateSubSection($input: CreateSubSectionInput!, $condition: ModelSubSectionConditionInput) {
+    createSubSection(input: $input, condition: $condition) {
+      id
+      name
+      description
+      defaultAddonFee
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+  }
+`;
+export const updateSubSection = /* GraphQL */ `
+  mutation UpdateSubSection($input: UpdateSubSectionInput!, $condition: ModelSubSectionConditionInput) {
+    updateSubSection(input: $input, condition: $condition) {
+      id
+      name
+      description
+      defaultAddonFee
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+  }
+`;
+export const deleteSubSection = /* GraphQL */ `
+  mutation DeleteSubSection($input: DeleteSubSectionInput!, $condition: ModelSubSectionConditionInput) {
+    deleteSubSection(input: $input, condition: $condition) {
+      id
+      __typename
+    }
+  }
+`;
+export const createProductSection = /* GraphQL */ `
+  mutation CreateProductSection($input: CreateProductSectionInput!, $condition: ModelProductSectionConditionInput) {
+    createProductSection(input: $input, condition: $condition) {
+      id
+      productId
+      sectionId
+      sortOrder
+      addonFeeOverride
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+  }
+`;
+export const updateProductSection = /* GraphQL */ `
+  mutation UpdateProductSection($input: UpdateProductSectionInput!, $condition: ModelProductSectionConditionInput) {
+    updateProductSection(input: $input, condition: $condition) {
+      id
+      productId
+      sectionId
+      sortOrder
+      addonFeeOverride
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+  }
+`;
+export const deleteProductSection = /* GraphQL */ `
+  mutation DeleteProductSection($input: DeleteProductSectionInput!, $condition: ModelProductSectionConditionInput) {
+    deleteProductSection(input: $input, condition: $condition) {
+      id
+      __typename
+    }
+  }
+`;
+export const createSectionSubSection = /* GraphQL */ `
+  mutation CreateSectionSubSection($input: CreateSectionSubSectionInput!, $condition: ModelSectionSubSectionConditionInput) {
+    createSectionSubSection(input: $input, condition: $condition) {
+      id
+      sectionId
+      subSectionId
+      sortOrder
+      addonFeeOverride
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+  }
+`;
+export const updateSectionSubSection = /* GraphQL */ `
+  mutation UpdateSectionSubSection($input: UpdateSectionSubSectionInput!, $condition: ModelSectionSubSectionConditionInput) {
+    updateSectionSubSection(input: $input, condition: $condition) {
+      id
+      sectionId
+      subSectionId
+      sortOrder
+      addonFeeOverride
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+  }
+`;
+export const deleteSectionSubSection = /* GraphQL */ `
+  mutation DeleteSectionSubSection($input: DeleteSectionSubSectionInput!, $condition: ModelSectionSubSectionConditionInput) {
+    deleteSectionSubSection(input: $input, condition: $condition) {
+      id
       __typename
     }
   }

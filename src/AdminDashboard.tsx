@@ -42,6 +42,8 @@ import {
   Select,
   InputAdornment,
   Collapse,
+  List,
+  ListItem,
 } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import CheckIcon from '@mui/icons-material/Check'
@@ -64,10 +66,27 @@ import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import AddIcon from '@mui/icons-material/Add'
+import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
+import SortByAlphaIcon from '@mui/icons-material/SortByAlpha'
 import { getUrl } from 'aws-amplify/storage'
 import MessagesDialog from './MessagesDialog'
 import { updateUser } from './graphql/mutations'
 import JSZip from 'jszip'
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  verticalListSortingStrategy,
+  useSortable,
+  arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 
 // GraphQL queries and mutations (these will need to be generated after amplify push)
 const listAdsQuery = /* GraphQL */ `
@@ -284,6 +303,98 @@ const deleteProductPlacementMutation = /* GraphQL */ `
   }
 `
 
+const listSectionsQuery = /* GraphQL */ `
+  query ListSections($filter: ModelSectionFilterInput) {
+    listSections(filter: $filter) {
+      items { id name description defaultAddonFee isArchived }
+    }
+  }
+`
+const createSectionMutation = /* GraphQL */ `
+  mutation CreateSection($input: CreateSectionInput!) {
+    createSection(input: $input) { id name description defaultAddonFee isArchived }
+  }
+`
+const updateSectionMutation = /* GraphQL */ `
+  mutation UpdateSection($input: UpdateSectionInput!) {
+    updateSection(input: $input) { id name description defaultAddonFee isArchived }
+  }
+`
+const deleteSectionMutation = /* GraphQL */ `
+  mutation DeleteSection($input: DeleteSectionInput!) {
+    deleteSection(input: $input) { id }
+  }
+`
+
+const listSubSectionsQuery = /* GraphQL */ `
+  query ListSubSections($filter: ModelSubSectionFilterInput) {
+    listSubSections(filter: $filter) {
+      items { id name description defaultAddonFee isArchived }
+    }
+  }
+`
+const createSubSectionMutation = /* GraphQL */ `
+  mutation CreateSubSection($input: CreateSubSectionInput!) {
+    createSubSection(input: $input) { id name description defaultAddonFee isArchived }
+  }
+`
+const updateSubSectionMutation = /* GraphQL */ `
+  mutation UpdateSubSection($input: UpdateSubSectionInput!) {
+    updateSubSection(input: $input) { id name description defaultAddonFee isArchived }
+  }
+`
+const deleteSubSectionMutation = /* GraphQL */ `
+  mutation DeleteSubSection($input: DeleteSubSectionInput!) {
+    deleteSubSection(input: $input) { id }
+  }
+`
+
+const listProductSectionsQuery = /* GraphQL */ `
+  query ListProductSections($filter: ModelProductSectionFilterInput) {
+    listProductSections(filter: $filter) {
+      items { id productId sectionId sortOrder addonFeeOverride isArchived }
+    }
+  }
+`
+const createProductSectionMutation = /* GraphQL */ `
+  mutation CreateProductSection($input: CreateProductSectionInput!) {
+    createProductSection(input: $input) { id productId sectionId sortOrder addonFeeOverride isArchived }
+  }
+`
+const updateProductSectionMutation = /* GraphQL */ `
+  mutation UpdateProductSection($input: UpdateProductSectionInput!) {
+    updateProductSection(input: $input) { id productId sectionId sortOrder addonFeeOverride isArchived }
+  }
+`
+const deleteProductSectionMutation = /* GraphQL */ `
+  mutation DeleteProductSection($input: DeleteProductSectionInput!) {
+    deleteProductSection(input: $input) { id }
+  }
+`
+
+const listSectionSubSectionsQuery = /* GraphQL */ `
+  query ListSectionSubSections($filter: ModelSectionSubSectionFilterInput) {
+    listSectionSubSections(filter: $filter) {
+      items { id sectionId subSectionId sortOrder addonFeeOverride isArchived }
+    }
+  }
+`
+const createSectionSubSectionMutation = /* GraphQL */ `
+  mutation CreateSectionSubSection($input: CreateSectionSubSectionInput!) {
+    createSectionSubSection(input: $input) { id sectionId subSectionId sortOrder addonFeeOverride isArchived }
+  }
+`
+const updateSectionSubSectionMutation = /* GraphQL */ `
+  mutation UpdateSectionSubSection($input: UpdateSectionSubSectionInput!) {
+    updateSectionSubSection(input: $input) { id sectionId subSectionId sortOrder addonFeeOverride isArchived }
+  }
+`
+const deleteSectionSubSectionMutation = /* GraphQL */ `
+  mutation DeleteSectionSubSection($input: DeleteSectionSubSectionInput!) {
+    deleteSectionSubSection(input: $input) { id }
+  }
+`
+
 const listPricingSettingsQuery = /* GraphQL */ `
   query ListPricingSettings {
     listPricingSettings {
@@ -393,6 +504,40 @@ interface ProductPlacement {
   isArchived: boolean
 }
 
+interface Section {
+  id: string
+  name: string
+  description?: string
+  defaultAddonFee: number
+  isArchived: boolean
+}
+
+interface SubSection {
+  id: string
+  name: string
+  description?: string
+  defaultAddonFee: number
+  isArchived: boolean
+}
+
+interface ProductSection {
+  id: string
+  productId: string
+  sectionId: string
+  sortOrder: number
+  addonFeeOverride?: number
+  isArchived: boolean
+}
+
+interface SectionSubSection {
+  id: string
+  sectionId: string
+  subSectionId: string
+  sortOrder: number
+  addonFeeOverride?: number
+  isArchived: boolean
+}
+
 interface AdminDashboardProps {
   onBack: () => void
   initialAdFilter?: string // Ad ID to filter by
@@ -462,6 +607,76 @@ function UserRow({ user, selected, onSelect, onToggleAdmin, onToggleBlock, onMes
   )
 }
 
+// Sortable row for ProductSection DnD
+function SortablePSRow({ ps, sections, onEdit, onRemove }: {
+  ps: ProductSection
+  sections: Section[]
+  onEdit: () => void
+  onRemove: () => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ps.id })
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }
+  const globalSection = sections.find(s => s.id === ps.sectionId)
+  const defaultFee = globalSection?.defaultAddonFee ?? 0
+  const effectiveFee = ps.addonFeeOverride ?? defaultFee
+  return (
+    <TableRow ref={setNodeRef} style={style}>
+      <TableCell sx={{ width: 32, p: 0.5, color: 'text.disabled', cursor: 'grab' }} {...attributes} {...listeners}>
+        <DragIndicatorIcon fontSize="small" />
+      </TableCell>
+      <TableCell>{globalSection?.name || ps.sectionId}</TableCell>
+      <TableCell>${defaultFee.toFixed(2)}</TableCell>
+      <TableCell>{ps.addonFeeOverride != null ? `$${ps.addonFeeOverride.toFixed(2)}` : <Typography variant="body2" color="text.secondary">(default)</Typography>}</TableCell>
+      <TableCell>${effectiveFee.toFixed(2)}</TableCell>
+      <TableCell align="right">
+        <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+          <Tooltip title="Edit fee override">
+            <IconButton size="small" onClick={onEdit}><EditIcon fontSize="small" /></IconButton>
+          </Tooltip>
+          <Tooltip title="Remove from product">
+            <IconButton size="small" color="error" onClick={onRemove}><DeleteIcon fontSize="small" /></IconButton>
+          </Tooltip>
+        </Stack>
+      </TableCell>
+    </TableRow>
+  )
+}
+
+// Sortable row for SectionSubSection DnD
+function SortableSSRow({ ss, subSections, onEdit, onRemove }: {
+  ss: SectionSubSection
+  subSections: SubSection[]
+  onEdit: () => void
+  onRemove: () => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: ss.id })
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 }
+  const globalSub = subSections.find(s => s.id === ss.subSectionId)
+  const defaultFee = globalSub?.defaultAddonFee ?? 0
+  const effectiveFee = ss.addonFeeOverride ?? defaultFee
+  return (
+    <TableRow ref={setNodeRef} style={style}>
+      <TableCell sx={{ width: 32, p: 0.5, color: 'text.disabled', cursor: 'grab' }} {...attributes} {...listeners}>
+        <DragIndicatorIcon fontSize="small" />
+      </TableCell>
+      <TableCell>{globalSub?.name || ss.subSectionId}</TableCell>
+      <TableCell>${defaultFee.toFixed(2)}</TableCell>
+      <TableCell>{ss.addonFeeOverride != null ? `$${ss.addonFeeOverride.toFixed(2)}` : <Typography variant="body2" color="text.secondary">(default)</Typography>}</TableCell>
+      <TableCell>${effectiveFee.toFixed(2)}</TableCell>
+      <TableCell align="right">
+        <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+          <Tooltip title="Edit fee override">
+            <IconButton size="small" onClick={onEdit}><EditIcon fontSize="small" /></IconButton>
+          </Tooltip>
+          <Tooltip title="Remove from section">
+            <IconButton size="small" color="error" onClick={onRemove}><DeleteIcon fontSize="small" /></IconButton>
+          </Tooltip>
+        </Stack>
+      </TableCell>
+    </TableRow>
+  )
+}
+
 export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboardProps) {
   const client = generateClient()
   const { user, signOut } = useAuthenticator()
@@ -511,16 +726,61 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
   const [editingProduct, setEditingProduct] = useState<Product | null>(null)
   const [productForm, setProductForm] = useState({ name: '', widthInches: 3, basePrice: 25 })
 
+  // Products sub-tab (0 = Products, 1 = Placements)
+  const [productsSubTab, setProductsSubTab] = useState(0)
+
   // Placement state
   const [placements, setPlacements] = useState<Placement[]>([])
   const [productPlacements, setProductPlacements] = useState<ProductPlacement[]>([])
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null)
   const [placementForm, setPlacementForm] = useState({ name: '', description: '', defaultAddonFee: 0 })
   const [editingPlacement, setEditingPlacement] = useState<Placement | null>(null)
-  const [addingGlobalPlacement, setAddingGlobalPlacement] = useState(false)
+  const [placementDialogOpen, setPlacementDialogOpen] = useState(false)
   const [addingPlacementToProductId, setAddingPlacementToProductId] = useState<string | null>(null)
   const [addPlacementToProductForm, setAddPlacementToProductForm] = useState({ placementId: '', addonFeeOverride: '' })
-  
+  const [editingProductPlacement, setEditingProductPlacement] = useState<ProductPlacement | null>(null)
+  const [productPlacementDialogOpen, setProductPlacementDialogOpen] = useState(false)
+  const [productPlacementFeeOverride, setProductPlacementFeeOverride] = useState('')
+
+  // Section / SubSection state
+  const [sections, setSections] = useState<Section[]>([])
+  const [subSections, setSubSections] = useState<SubSection[]>([])
+  const [productSections, setProductSections] = useState<ProductSection[]>([])
+  const [sectionSubSections, setSectionSubSections] = useState<SectionSubSection[]>([])
+
+  const [sectionDialogOpen, setSectionDialogOpen] = useState(false)
+  const [editingSection, setEditingSection] = useState<Section | null>(null)
+  const [sectionForm, setSectionForm] = useState({ name: '', description: '', defaultAddonFee: 0 })
+
+  const [subSectionDialogOpen, setSubSectionDialogOpen] = useState(false)
+  const [editingSubSection, setEditingSubSection] = useState<SubSection | null>(null)
+  const [subSectionForm, setSubSectionForm] = useState({ name: '', description: '', defaultAddonFee: 0 })
+
+  // Checklist dialogs
+  const [addSectionsToProductOpen, setAddSectionsToProductOpen] = useState(false)
+  const [addSectionsToProductId, setAddSectionsToProductId] = useState<string | null>(null)
+  const [selectedSectionIds, setSelectedSectionIds] = useState<string[]>([])
+
+  const [addSubSectionsToSectionOpen, setAddSubSectionsToSectionOpen] = useState(false)
+  const [addSubSectionsToSectionId, setAddSubSectionsToSectionId] = useState<string | null>(null)
+  const [selectedSubSectionIds, setSelectedSubSectionIds] = useState<string[]>([])
+
+  // ProductSection fee override dialog
+  const [editingProductSection, setEditingProductSection] = useState<ProductSection | null>(null)
+  const [productSectionDialogOpen, setProductSectionDialogOpen] = useState(false)
+  const [productSectionFeeOverride, setProductSectionFeeOverride] = useState('')
+
+  // SectionSubSection fee override dialog
+  const [editingSectionSubSection, setEditingSectionSubSection] = useState<SectionSubSection | null>(null)
+  const [sectionSubSectionDialogOpen, setSectionSubSectionDialogOpen] = useState(false)
+  const [sectionSubSectionFeeOverride, setSectionSubSectionFeeOverride] = useState('')
+
+  // Expanded section row (for sub-sections sub-table in Sections sub-tab)
+  const [expandedSectionId, setExpandedSectionId] = useState<string | null>(null)
+
+  // DnD sensors
+  const sensors = useSensors(useSensor(PointerSensor))
+
   // User menu and account states
   const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null)
   const [contactDialogOpen, setContactDialogOpen] = useState(false)
@@ -548,7 +808,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
   useEffect(() => {
     if (activeTab === 0) loadAds(adIdSearch || initialAdFilter)
     else if (activeTab === 1) loadUsers()
-    else if (activeTab === 2) { loadProducts(); loadAllPlacements() }
+    else if (activeTab === 2) { loadProducts(); loadAllPlacements(); loadAllSections(); loadAllSubSections() }
     else if (activeTab === 3) loadPricingSettings()
   }, [activeTab, initialAdFilter, adIdSearch])
 
@@ -1731,7 +1991,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
       setSnackbar({ open: true, message: 'Width must be greater than 0', severity: 'error' })
       return
     }
-    if (!productForm.basePrice || productForm.basePrice < 0) {
+    if (productForm.basePrice === undefined || productForm.basePrice === null || productForm.basePrice < 0) {
       setSnackbar({ open: true, message: 'Base price must be 0 or greater', severity: 'error' })
       return
     }
@@ -1865,13 +2125,67 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
     }
   }
 
+  const loadAllSections = async () => {
+    try {
+      const result = await client.graphql({
+        query: listSectionsQuery,
+        authMode: 'userPool'
+      }) as { data: { listSections: { items: Section[] } } }
+      setSections(result.data.listSections.items || [])
+    } catch (error) {
+      console.error('Error loading sections:', error)
+    }
+  }
+
+  const loadAllSubSections = async () => {
+    try {
+      const result = await client.graphql({
+        query: listSubSectionsQuery,
+        authMode: 'userPool'
+      }) as { data: { listSubSections: { items: SubSection[] } } }
+      setSubSections(result.data.listSubSections.items || [])
+    } catch (error) {
+      console.error('Error loading sub-sections:', error)
+    }
+  }
+
+  const loadProductSections = async (productId: string) => {
+    try {
+      const result = await client.graphql({
+        query: listProductSectionsQuery,
+        variables: { filter: { productId: { eq: productId }, isArchived: { ne: true } } },
+        authMode: 'userPool'
+      }) as { data: { listProductSections: { items: ProductSection[] } } }
+      const sorted = [...(result.data.listProductSections.items || [])].sort((a, b) => a.sortOrder - b.sortOrder)
+      setProductSections(sorted)
+    } catch (error) {
+      console.error('Error loading product sections:', error)
+    }
+  }
+
+  const loadSectionSubSections = async (sectionId: string) => {
+    try {
+      const result = await client.graphql({
+        query: listSectionSubSectionsQuery,
+        variables: { filter: { sectionId: { eq: sectionId }, isArchived: { ne: true } } },
+        authMode: 'userPool'
+      }) as { data: { listSectionSubSections: { items: SectionSubSection[] } } }
+      const sorted = [...(result.data.listSectionSubSections.items || [])].sort((a, b) => a.sortOrder - b.sortOrder)
+      setSectionSubSections(sorted)
+    } catch (error) {
+      console.error('Error loading section sub-sections:', error)
+    }
+  }
+
   const handleToggleProductExpand = (productId: string) => {
     if (expandedProductId === productId) {
       setExpandedProductId(null)
       setProductPlacements([])
+      setProductSections([])
     } else {
       setExpandedProductId(productId)
       loadProductPlacements(productId)
+      loadProductSections(productId)
       setAddingPlacementToProductId(null)
       setAddPlacementToProductForm({ placementId: '', addonFeeOverride: '' })
     }
@@ -1909,7 +2223,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
         setSnackbar({ open: true, message: 'Placement created', severity: 'success' })
       }
       setEditingPlacement(null)
-      setAddingGlobalPlacement(false)
+      setPlacementDialogOpen(false)
       setPlacementForm({ name: '', description: '', defaultAddonFee: 0 })
       loadAllPlacements()
     } catch (error) {
@@ -2001,6 +2315,9 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
         variables: { input: { id: pp.id, addonFeeOverride: override } },
         authMode: 'userPool'
       })
+      setProductPlacementDialogOpen(false)
+      setEditingProductPlacement(null)
+      setProductPlacementFeeOverride('')
       loadProductPlacements(pp.productId)
     } catch (error) {
       console.error('Error updating fee override:', error)
@@ -2008,9 +2325,329 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
     }
   }
 
+  // ── Section CRUD ──────────────────────────────────────────────────────────
+
+  const handleSaveSection = async () => {
+    if (!sectionForm.name.trim()) return
+    try {
+      if (editingSection) {
+        await client.graphql({
+          query: updateSectionMutation,
+          variables: { input: { id: editingSection.id, name: sectionForm.name.trim(), description: sectionForm.description || undefined, defaultAddonFee: sectionForm.defaultAddonFee } },
+          authMode: 'userPool'
+        })
+        setSnackbar({ open: true, message: 'Section updated', severity: 'success' })
+      } else {
+        await client.graphql({
+          query: createSectionMutation,
+          variables: { input: { name: sectionForm.name.trim(), description: sectionForm.description || undefined, defaultAddonFee: sectionForm.defaultAddonFee, isArchived: false } },
+          authMode: 'userPool'
+        })
+        setSnackbar({ open: true, message: 'Section created', severity: 'success' })
+      }
+      setSectionDialogOpen(false)
+      setEditingSection(null)
+      setSectionForm({ name: '', description: '', defaultAddonFee: 0 })
+      loadAllSections()
+    } catch (error) {
+      console.error('Error saving section:', error)
+      setSnackbar({ open: true, message: 'Failed to save section', severity: 'error' })
+    }
+  }
+
+  const handleArchiveSection = async (s: Section) => {
+    try {
+      await client.graphql({
+        query: updateSectionMutation,
+        variables: { input: { id: s.id, isArchived: !s.isArchived } },
+        authMode: 'userPool'
+      })
+      setSnackbar({ open: true, message: s.isArchived ? 'Section restored' : 'Section archived', severity: 'success' })
+      loadAllSections()
+    } catch (error) {
+      console.error('Error archiving section:', error)
+      setSnackbar({ open: true, message: 'Failed to update section', severity: 'error' })
+    }
+  }
+
+  const handleDeleteSection = async (s: Section) => {
+    if (!confirm(`Delete section "${s.name}" permanently?`)) return
+    try {
+      await client.graphql({
+        query: deleteSectionMutation,
+        variables: { input: { id: s.id } },
+        authMode: 'userPool'
+      })
+      setSnackbar({ open: true, message: 'Section deleted', severity: 'success' })
+      loadAllSections()
+    } catch (error) {
+      console.error('Error deleting section:', error)
+      setSnackbar({ open: true, message: 'Failed to delete section', severity: 'error' })
+    }
+  }
+
+  // ── SubSection CRUD ───────────────────────────────────────────────────────
+
+  const handleSaveSubSection = async () => {
+    if (!subSectionForm.name.trim()) return
+    try {
+      if (editingSubSection) {
+        await client.graphql({
+          query: updateSubSectionMutation,
+          variables: { input: { id: editingSubSection.id, name: subSectionForm.name.trim(), description: subSectionForm.description || undefined, defaultAddonFee: subSectionForm.defaultAddonFee } },
+          authMode: 'userPool'
+        })
+        setSnackbar({ open: true, message: 'Sub-Section updated', severity: 'success' })
+      } else {
+        await client.graphql({
+          query: createSubSectionMutation,
+          variables: { input: { name: subSectionForm.name.trim(), description: subSectionForm.description || undefined, defaultAddonFee: subSectionForm.defaultAddonFee, isArchived: false } },
+          authMode: 'userPool'
+        })
+        setSnackbar({ open: true, message: 'Sub-Section created', severity: 'success' })
+      }
+      setSubSectionDialogOpen(false)
+      setEditingSubSection(null)
+      setSubSectionForm({ name: '', description: '', defaultAddonFee: 0 })
+      loadAllSubSections()
+    } catch (error) {
+      console.error('Error saving sub-section:', error)
+      setSnackbar({ open: true, message: 'Failed to save sub-section', severity: 'error' })
+    }
+  }
+
+  const handleArchiveSubSection = async (ss: SubSection) => {
+    try {
+      await client.graphql({
+        query: updateSubSectionMutation,
+        variables: { input: { id: ss.id, isArchived: !ss.isArchived } },
+        authMode: 'userPool'
+      })
+      setSnackbar({ open: true, message: ss.isArchived ? 'Sub-Section restored' : 'Sub-Section archived', severity: 'success' })
+      loadAllSubSections()
+    } catch (error) {
+      console.error('Error archiving sub-section:', error)
+      setSnackbar({ open: true, message: 'Failed to update sub-section', severity: 'error' })
+    }
+  }
+
+  const handleDeleteSubSection = async (ss: SubSection) => {
+    if (!confirm(`Delete sub-section "${ss.name}" permanently?`)) return
+    try {
+      await client.graphql({
+        query: deleteSubSectionMutation,
+        variables: { input: { id: ss.id } },
+        authMode: 'userPool'
+      })
+      setSnackbar({ open: true, message: 'Sub-Section deleted', severity: 'success' })
+      loadAllSubSections()
+    } catch (error) {
+      console.error('Error deleting sub-section:', error)
+      setSnackbar({ open: true, message: 'Failed to delete sub-section', severity: 'error' })
+    }
+  }
+
+  // ── ProductSection handlers ───────────────────────────────────────────────
+
+  const handleAddSectionsToProduct = async (productId: string, sectionIds: string[]) => {
+    try {
+      const maxOrder = productSections.length > 0 ? Math.max(...productSections.map(ps => ps.sortOrder)) : -1
+      await Promise.all(sectionIds.map((sid, i) =>
+        client.graphql({
+          query: createProductSectionMutation,
+          variables: { input: { productId, sectionId: sid, sortOrder: maxOrder + 1 + i, isArchived: false } },
+          authMode: 'userPool'
+        })
+      ))
+      setSnackbar({ open: true, message: 'Sections added', severity: 'success' })
+      setAddSectionsToProductOpen(false)
+      setSelectedSectionIds([])
+      loadProductSections(productId)
+    } catch (error) {
+      console.error('Error adding sections:', error)
+      setSnackbar({ open: true, message: 'Failed to add sections', severity: 'error' })
+    }
+  }
+
+  const handleRemoveProductSection = async (ps: ProductSection) => {
+    if (!confirm('Remove this section from the product?')) return
+    try {
+      await client.graphql({
+        query: deleteProductSectionMutation,
+        variables: { input: { id: ps.id } },
+        authMode: 'userPool'
+      })
+      setSnackbar({ open: true, message: 'Section removed', severity: 'success' })
+      loadProductSections(ps.productId)
+    } catch (error) {
+      console.error('Error removing product section:', error)
+      setSnackbar({ open: true, message: 'Failed to remove section', severity: 'error' })
+    }
+  }
+
+  const handleUpdateProductSectionFee = async (ps: ProductSection, feeStr: string) => {
+    try {
+      const override = feeStr !== '' ? parseFloat(feeStr) : null
+      await client.graphql({
+        query: updateProductSectionMutation,
+        variables: { input: { id: ps.id, addonFeeOverride: override } },
+        authMode: 'userPool'
+      })
+      setProductSectionDialogOpen(false)
+      setEditingProductSection(null)
+      setProductSectionFeeOverride('')
+      loadProductSections(ps.productId)
+    } catch (error) {
+      console.error('Error updating section fee override:', error)
+      setSnackbar({ open: true, message: 'Failed to update fee override', severity: 'error' })
+    }
+  }
+
+  const handleSortProductSectionsAlpha = async (productId: string) => {
+    const sorted = [...productSections].sort((a, b) => {
+      const na = sections.find(s => s.id === a.sectionId)?.name ?? ''
+      const nb = sections.find(s => s.id === b.sectionId)?.name ?? ''
+      return na.localeCompare(nb)
+    })
+    setProductSections(sorted)
+    try {
+      await Promise.all(sorted.map((ps, i) =>
+        client.graphql({
+          query: updateProductSectionMutation,
+          variables: { input: { id: ps.id, sortOrder: i } },
+          authMode: 'userPool'
+        })
+      ))
+      setSnackbar({ open: true, message: 'Sections sorted alphabetically', severity: 'success' })
+    } catch (error) {
+      console.error('Error sorting product sections:', error)
+      loadProductSections(productId)
+    }
+  }
+
+  const handleDragEndProductSections = async (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = productSections.findIndex(ps => ps.id === active.id)
+    const newIndex = productSections.findIndex(ps => ps.id === over.id)
+    const reordered = arrayMove(productSections, oldIndex, newIndex)
+    setProductSections(reordered)
+    try {
+      await Promise.all(reordered.map((ps, i) =>
+        client.graphql({
+          query: updateProductSectionMutation,
+          variables: { input: { id: ps.id, sortOrder: i } },
+          authMode: 'userPool'
+        })
+      ))
+    } catch (error) {
+      console.error('Error updating sort order:', error)
+      if (expandedProductId) loadProductSections(expandedProductId)
+    }
+  }
+
+  // ── SectionSubSection handlers ────────────────────────────────────────────
+
+  const handleAddSubSectionsToSection = async (sectionId: string, subSectionIds: string[]) => {
+    try {
+      const maxOrder = sectionSubSections.length > 0 ? Math.max(...sectionSubSections.map(ss => ss.sortOrder)) : -1
+      await Promise.all(subSectionIds.map((sid, i) =>
+        client.graphql({
+          query: createSectionSubSectionMutation,
+          variables: { input: { sectionId, subSectionId: sid, sortOrder: maxOrder + 1 + i, isArchived: false } },
+          authMode: 'userPool'
+        })
+      ))
+      setSnackbar({ open: true, message: 'Sub-Sections added', severity: 'success' })
+      setAddSubSectionsToSectionOpen(false)
+      setSelectedSubSectionIds([])
+      loadSectionSubSections(sectionId)
+    } catch (error) {
+      console.error('Error adding sub-sections:', error)
+      setSnackbar({ open: true, message: 'Failed to add sub-sections', severity: 'error' })
+    }
+  }
+
+  const handleRemoveSectionSubSection = async (ss: SectionSubSection) => {
+    if (!confirm('Remove this sub-section from the section?')) return
+    try {
+      await client.graphql({
+        query: deleteSectionSubSectionMutation,
+        variables: { input: { id: ss.id } },
+        authMode: 'userPool'
+      })
+      setSnackbar({ open: true, message: 'Sub-Section removed', severity: 'success' })
+      loadSectionSubSections(ss.sectionId)
+    } catch (error) {
+      console.error('Error removing section sub-section:', error)
+      setSnackbar({ open: true, message: 'Failed to remove sub-section', severity: 'error' })
+    }
+  }
+
+  const handleUpdateSectionSubSectionFee = async (ss: SectionSubSection, feeStr: string) => {
+    try {
+      const override = feeStr !== '' ? parseFloat(feeStr) : null
+      await client.graphql({
+        query: updateSectionSubSectionMutation,
+        variables: { input: { id: ss.id, addonFeeOverride: override } },
+        authMode: 'userPool'
+      })
+      setSectionSubSectionDialogOpen(false)
+      setEditingSectionSubSection(null)
+      setSectionSubSectionFeeOverride('')
+      loadSectionSubSections(ss.sectionId)
+    } catch (error) {
+      console.error('Error updating sub-section fee override:', error)
+      setSnackbar({ open: true, message: 'Failed to update fee override', severity: 'error' })
+    }
+  }
+
+  const handleSortSectionSubSectionsAlpha = async (sectionId: string) => {
+    const sorted = [...sectionSubSections].sort((a, b) => {
+      const na = subSections.find(s => s.id === a.subSectionId)?.name ?? ''
+      const nb = subSections.find(s => s.id === b.subSectionId)?.name ?? ''
+      return na.localeCompare(nb)
+    })
+    setSectionSubSections(sorted)
+    try {
+      await Promise.all(sorted.map((ss, i) =>
+        client.graphql({
+          query: updateSectionSubSectionMutation,
+          variables: { input: { id: ss.id, sortOrder: i } },
+          authMode: 'userPool'
+        })
+      ))
+      setSnackbar({ open: true, message: 'Sub-Sections sorted alphabetically', severity: 'success' })
+    } catch (error) {
+      console.error('Error sorting section sub-sections:', error)
+      loadSectionSubSections(sectionId)
+    }
+  }
+
+  const handleDragEndSectionSubSections = async (event: DragEndEvent) => {
+    const { active, over } = event
+    if (!over || active.id === over.id) return
+    const oldIndex = sectionSubSections.findIndex(ss => ss.id === active.id)
+    const newIndex = sectionSubSections.findIndex(ss => ss.id === over.id)
+    const reordered = arrayMove(sectionSubSections, oldIndex, newIndex)
+    setSectionSubSections(reordered)
+    try {
+      await Promise.all(reordered.map((ss, i) =>
+        client.graphql({
+          query: updateSectionSubSectionMutation,
+          variables: { input: { id: ss.id, sortOrder: i } },
+          authMode: 'userPool'
+        })
+      ))
+    } catch (error) {
+      console.error('Error updating sort order:', error)
+      if (expandedSectionId) loadSectionSubSections(expandedSectionId)
+    }
+  }
+
 
   return (
-    <Box sx={{ width: '100vw', minHeight: '100vh', bgcolor: 'background.default' }}>
+    <Box sx={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default', overflow: 'hidden' }}>
       <AppBar position="fixed">
         <Toolbar>
           <IconButton color="inherit" onClick={onBack} edge="start" sx={{ mr: 2 }}>
@@ -2163,7 +2800,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
         </DialogActions>
       </Dialog>
       
-      <Box sx={{ pt: 10, px: 3, pb: 3 }}>
+      <Box sx={{ flex: 1, overflowY: 'auto', pt: 10, px: 3, pb: 3 }}>
         <Paper sx={{ mb: 3 }}>
           <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} variant="fullWidth">
             <Tab label="Ads" />
@@ -2574,9 +3211,16 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
 
             {/* Products Tab */}
             {activeTab === 2 && (
-              <>
-                {/* Placements Library */}
-                <Paper sx={{ mb: 2 }}>
+              <Paper>
+                <Tabs value={productsSubTab} onChange={(_, v) => setProductsSubTab(v)} sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
+                  <Tab label="Products" />
+                  <Tab label="Sections" />
+                  <Tab label="Sub-Sections" />
+                  <Tab label="Placements" />
+                </Tabs>
+
+                {/* Placements sub-tab */}
+                {productsSubTab === 3 && <Paper elevation={0}>
                   <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                     <Typography variant="subtitle1" fontWeight={600}>Placements Library</Typography>
                     <Button
@@ -2586,63 +3230,12 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                       onClick={() => {
                         setEditingPlacement(null)
                         setPlacementForm({ name: '', description: '', defaultAddonFee: 0 })
-                        setAddingGlobalPlacement(true)
+                        setPlacementDialogOpen(true)
                       }}
                     >
                       Add Placement
                     </Button>
                   </Box>
-
-                  {/* Inline add/edit form for global placement */}
-                  {(addingGlobalPlacement || editingPlacement) && (
-                    <Box sx={{ px: 2, pt: 2 }}>
-                      <Paper variant="outlined" sx={{ p: 2, mb: 2 }}>
-                        <Stack spacing={1.5}>
-                          <TextField
-                            size="small"
-                            label="Name"
-                            value={placementForm.name}
-                            onChange={e => setPlacementForm(f => ({ ...f, name: e.target.value }))}
-                            required
-                          />
-                          <TextField
-                            size="small"
-                            label="Description (optional)"
-                            value={placementForm.description}
-                            onChange={e => setPlacementForm(f => ({ ...f, description: e.target.value }))}
-                          />
-                          <TextField
-                            size="small"
-                            label="Default Addon Fee ($)"
-                            type="number"
-                            value={placementForm.defaultAddonFee}
-                            onChange={e => setPlacementForm(f => ({ ...f, defaultAddonFee: parseFloat(e.target.value) || 0 }))}
-                            InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
-                          />
-                          <Stack direction="row" spacing={1}>
-                            <Button
-                              size="small"
-                              variant="contained"
-                              disabled={!placementForm.name.trim()}
-                              onClick={handleSavePlacement}
-                            >
-                              {editingPlacement ? 'Update' : 'Create'}
-                            </Button>
-                            <Button
-                              size="small"
-                              onClick={() => {
-                                setAddingGlobalPlacement(false)
-                                setEditingPlacement(null)
-                                setPlacementForm({ name: '', description: '', defaultAddonFee: 0 })
-                              }}
-                            >
-                              Cancel
-                            </Button>
-                          </Stack>
-                        </Stack>
-                      </Paper>
-                    </Box>
-                  )}
 
                   <Table size="small">
                     <TableHead>
@@ -2680,7 +3273,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                                       description: placement.description || '',
                                       defaultAddonFee: placement.defaultAddonFee,
                                     })
-                                    setAddingGlobalPlacement(false)
+                                    setPlacementDialogOpen(true)
                                   }}>
                                     <EditIcon fontSize="small" />
                                   </IconButton>
@@ -2702,16 +3295,233 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                       )}
                     </TableBody>
                   </Table>
-                </Paper>
+                </Paper>}
 
-                {/* Products */}
-                <Paper>
-                  <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider' }}>
-                    <Tooltip title="Add new product. Creates a new ad product with configurable width and base price.">
-                      <Button variant="contained" onClick={() => { setEditingProduct(null); setProductForm({ name: '', widthInches: 3, basePrice: 25 }); setProductDialogOpen(true) }}>
-                        Add Product
-                      </Button>
-                    </Tooltip>
+                {/* Sections sub-tab */}
+                {productsSubTab === 1 && <Paper elevation={0}>
+                  <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="subtitle1" fontWeight={600}>Section Library</Typography>
+                    <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => {
+                      setEditingSection(null)
+                      setSectionForm({ name: '', description: '', defaultAddonFee: 0 })
+                      setSectionDialogOpen(true)
+                    }}>
+                      Add Section
+                    </Button>
+                  </Box>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ width: 40 }} />
+                        <TableCell>Name</TableCell>
+                        <TableCell>Description</TableCell>
+                        <TableCell>Default Fee</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell align="right">Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {sections.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={6} align="center">No sections in library</TableCell>
+                        </TableRow>
+                      ) : (
+                        sections.map(section => {
+                          const isSectionExpanded = expandedSectionId === section.id
+                          const assignedSubSectionIds = isSectionExpanded ? sectionSubSections.map(ss => ss.subSectionId) : []
+                          const availableSubSections = subSections.filter(ss => !ss.isArchived && !assignedSubSectionIds.includes(ss.id))
+                          return (
+                            <>
+                              <TableRow key={section.id} sx={{ opacity: section.isArchived ? 0.5 : 1 }}>
+                                <TableCell sx={{ width: 40, p: 0.5 }}>
+                                  <IconButton size="small" onClick={() => {
+                                    if (isSectionExpanded) {
+                                      setExpandedSectionId(null)
+                                      setSectionSubSections([])
+                                    } else {
+                                      setExpandedSectionId(section.id)
+                                      loadSectionSubSections(section.id)
+                                    }
+                                  }}>
+                                    {isSectionExpanded ? <ExpandMoreIcon fontSize="small" /> : <ChevronRightIcon fontSize="small" />}
+                                  </IconButton>
+                                </TableCell>
+                                <TableCell>{section.name}</TableCell>
+                                <TableCell>{section.description || '-'}</TableCell>
+                                <TableCell>${(section.defaultAddonFee || 0).toFixed(2)}</TableCell>
+                                <TableCell>
+                                  {section.isArchived ? <Chip size="small" label="Archived" /> : <Chip size="small" label="Active" color="success" />}
+                                </TableCell>
+                                <TableCell align="right">
+                                  <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                                    <Tooltip title="Edit">
+                                      <IconButton size="small" onClick={() => {
+                                        setEditingSection(section)
+                                        setSectionForm({ name: section.name, description: section.description || '', defaultAddonFee: section.defaultAddonFee })
+                                        setSectionDialogOpen(true)
+                                      }}>
+                                        <EditIcon fontSize="small" />
+                                      </IconButton>
+                                    </Tooltip>
+                                    <Tooltip title={section.isArchived ? 'Restore' : 'Archive'}>
+                                      <IconButton size="small" onClick={() => handleArchiveSection(section)}>
+                                        <ArchiveIcon fontSize="small" />
+                                      </IconButton>
+                                    </Tooltip>
+                                    <Tooltip title="Delete permanently">
+                                      <IconButton size="small" color="error" onClick={() => handleDeleteSection(section)}>
+                                        <DeleteIcon fontSize="small" />
+                                      </IconButton>
+                                    </Tooltip>
+                                  </Stack>
+                                </TableCell>
+                              </TableRow>
+                              <TableRow key={`${section.id}-subsections`}>
+                                <TableCell colSpan={6} sx={{ p: 0, borderBottom: isSectionExpanded ? undefined : 'none' }}>
+                                  <Collapse in={isSectionExpanded} timeout="auto" unmountOnExit>
+                                    <Box sx={{ bgcolor: 'grey.50', px: 4, py: 2 }}>
+                                      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
+                                        <Typography variant="subtitle2" fontWeight={600}>Sub-Sections in this section</Typography>
+                                        <Stack direction="row" spacing={1}>
+                                          <Tooltip title="Sort A-Z">
+                                            <IconButton size="small" onClick={() => handleSortSectionSubSectionsAlpha(section.id)}>
+                                              <SortByAlphaIcon fontSize="small" />
+                                            </IconButton>
+                                          </Tooltip>
+                                          <Button
+                                            size="small"
+                                            startIcon={<AddIcon />}
+                                            disabled={availableSubSections.length === 0}
+                                            onClick={() => {
+                                              setAddSubSectionsToSectionId(section.id)
+                                              setSelectedSubSectionIds([])
+                                              setAddSubSectionsToSectionOpen(true)
+                                            }}
+                                          >
+                                            + Add Sub-Sections
+                                          </Button>
+                                        </Stack>
+                                      </Stack>
+                                      {sectionSubSections.length === 0 ? (
+                                        <Typography variant="body2" color="text.secondary">No sub-sections assigned</Typography>
+                                      ) : (
+                                        <Table size="small">
+                                          <TableHead>
+                                            <TableRow>
+                                              <TableCell sx={{ width: 32 }} />
+                                              <TableCell>Name</TableCell>
+                                              <TableCell>Default Fee</TableCell>
+                                              <TableCell>Override</TableCell>
+                                              <TableCell>Effective</TableCell>
+                                              <TableCell align="right">Actions</TableCell>
+                                            </TableRow>
+                                          </TableHead>
+                                          <TableBody>
+                                            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEndSectionSubSections}>
+                                              <SortableContext items={sectionSubSections.map(ss => ss.id)} strategy={verticalListSortingStrategy}>
+                                                {sectionSubSections.map(ss => (
+                                                  <SortableSSRow
+                                                    key={ss.id}
+                                                    ss={ss}
+                                                    subSections={subSections}
+                                                    onEdit={() => {
+                                                      setEditingSectionSubSection(ss)
+                                                      setSectionSubSectionFeeOverride(ss.addonFeeOverride != null ? String(ss.addonFeeOverride) : '')
+                                                      setSectionSubSectionDialogOpen(true)
+                                                    }}
+                                                    onRemove={() => handleRemoveSectionSubSection(ss)}
+                                                  />
+                                                ))}
+                                              </SortableContext>
+                                            </DndContext>
+                                          </TableBody>
+                                        </Table>
+                                      )}
+                                    </Box>
+                                  </Collapse>
+                                </TableCell>
+                              </TableRow>
+                            </>
+                          )
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </Paper>}
+
+                {/* Sub-Sections sub-tab */}
+                {productsSubTab === 2 && <Paper elevation={0}>
+                  <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="subtitle1" fontWeight={600}>Sub-Section Library</Typography>
+                    <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => {
+                      setEditingSubSection(null)
+                      setSubSectionForm({ name: '', description: '', defaultAddonFee: 0 })
+                      setSubSectionDialogOpen(true)
+                    }}>
+                      Add Sub-Section
+                    </Button>
+                  </Box>
+                  <Table size="small">
+                    <TableHead>
+                      <TableRow>
+                        <TableCell>Name</TableCell>
+                        <TableCell>Description</TableCell>
+                        <TableCell>Default Fee</TableCell>
+                        <TableCell>Status</TableCell>
+                        <TableCell align="right">Actions</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {subSections.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} align="center">No sub-sections in library</TableCell>
+                        </TableRow>
+                      ) : (
+                        subSections.map(ss => (
+                          <TableRow key={ss.id} sx={{ opacity: ss.isArchived ? 0.5 : 1 }}>
+                            <TableCell>{ss.name}</TableCell>
+                            <TableCell>{ss.description || '-'}</TableCell>
+                            <TableCell>${(ss.defaultAddonFee || 0).toFixed(2)}</TableCell>
+                            <TableCell>
+                              {ss.isArchived ? <Chip size="small" label="Archived" /> : <Chip size="small" label="Active" color="success" />}
+                            </TableCell>
+                            <TableCell align="right">
+                              <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                                <Tooltip title="Edit">
+                                  <IconButton size="small" onClick={() => {
+                                    setEditingSubSection(ss)
+                                    setSubSectionForm({ name: ss.name, description: ss.description || '', defaultAddonFee: ss.defaultAddonFee })
+                                    setSubSectionDialogOpen(true)
+                                  }}>
+                                    <EditIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title={ss.isArchived ? 'Restore' : 'Archive'}>
+                                  <IconButton size="small" onClick={() => handleArchiveSubSection(ss)}>
+                                    <ArchiveIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                                <Tooltip title="Delete permanently">
+                                  <IconButton size="small" color="error" onClick={() => handleDeleteSubSection(ss)}>
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              </Stack>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
+                    </TableBody>
+                  </Table>
+                </Paper>}
+
+                {/* Products sub-tab */}
+                {productsSubTab === 0 && <Paper elevation={0}>
+                  <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="subtitle1" fontWeight={600}>Product Library</Typography>
+                    <Button size="small" variant="contained" startIcon={<AddIcon />} onClick={() => { setEditingProduct(null); setProductForm({ name: '', widthInches: 3, basePrice: 25 }); setProductDialogOpen(true) }}>
+                      Add Product
+                    </Button>
                   </Box>
                   <Table>
                     <TableHead>
@@ -2782,6 +3592,67 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                               <TableRow key={`${product.id}-placements`}>
                                 <TableCell colSpan={6} sx={{ p: 0, borderBottom: isExpanded ? undefined : 'none' }}>
                                   <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                                    {/* Sections panel */}
+                                    <Box sx={{ bgcolor: 'grey.50', px: 4, py: 2, borderBottom: 1, borderColor: 'divider' }}>
+                                      <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
+                                        <Typography variant="subtitle2" fontWeight={600}>Sections for this product</Typography>
+                                        <Stack direction="row" spacing={1}>
+                                          <Tooltip title="Sort A-Z">
+                                            <IconButton size="small" onClick={() => handleSortProductSectionsAlpha(product.id)}>
+                                              <SortByAlphaIcon fontSize="small" />
+                                            </IconButton>
+                                          </Tooltip>
+                                          <Button
+                                            size="small"
+                                            startIcon={<AddIcon />}
+                                            disabled={sections.filter(s => !s.isArchived && !productSections.map(ps => ps.sectionId).includes(s.id)).length === 0}
+                                            onClick={() => {
+                                              setAddSectionsToProductId(product.id)
+                                              setSelectedSectionIds([])
+                                              setAddSectionsToProductOpen(true)
+                                            }}
+                                          >
+                                            + Add Sections
+                                          </Button>
+                                        </Stack>
+                                      </Stack>
+                                      {productSections.length === 0 ? (
+                                        <Typography variant="body2" color="text.secondary">No sections assigned to this product</Typography>
+                                      ) : (
+                                        <Table size="small">
+                                          <TableHead>
+                                            <TableRow>
+                                              <TableCell sx={{ width: 32 }} />
+                                              <TableCell>Name</TableCell>
+                                              <TableCell>Default Fee</TableCell>
+                                              <TableCell>Override</TableCell>
+                                              <TableCell>Effective</TableCell>
+                                              <TableCell align="right">Actions</TableCell>
+                                            </TableRow>
+                                          </TableHead>
+                                          <TableBody>
+                                            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEndProductSections}>
+                                              <SortableContext items={productSections.map(ps => ps.id)} strategy={verticalListSortingStrategy}>
+                                                {productSections.map(ps => (
+                                                  <SortablePSRow
+                                                    key={ps.id}
+                                                    ps={ps}
+                                                    sections={sections}
+                                                    onEdit={() => {
+                                                      setEditingProductSection(ps)
+                                                      setProductSectionFeeOverride(ps.addonFeeOverride != null ? String(ps.addonFeeOverride) : '')
+                                                      setProductSectionDialogOpen(true)
+                                                    }}
+                                                    onRemove={() => handleRemoveProductSection(ps)}
+                                                  />
+                                                ))}
+                                              </SortableContext>
+                                            </DndContext>
+                                          </TableBody>
+                                        </Table>
+                                      )}
+                                    </Box>
+                                    {/* Placements panel */}
                                     <Box sx={{ bgcolor: 'grey.50', px: 4, py: 2 }}>
                                       <Stack direction="row" alignItems="center" justifyContent="space-between" mb={1}>
                                         <Typography variant="subtitle2" fontWeight={600}>Placements for this product</Typography>
@@ -2860,7 +3731,6 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                                               <TableCell>Default Fee</TableCell>
                                               <TableCell>Override</TableCell>
                                               <TableCell>Effective Fee</TableCell>
-                                              <TableCell>Status</TableCell>
                                               <TableCell align="right">Actions</TableCell>
                                             </TableRow>
                                           </TableHead>
@@ -2870,36 +3740,28 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                                               const defaultFee = globalPlacement?.defaultAddonFee ?? 0
                                               const effectiveFee = pp.addonFeeOverride ?? defaultFee
                                               return (
-                                                <TableRow key={pp.id} sx={{ opacity: pp.isArchived ? 0.5 : 1 }}>
+                                                <TableRow key={pp.id}>
                                                   <TableCell>{globalPlacement?.name || pp.placementId}</TableCell>
                                                   <TableCell>${defaultFee.toFixed(2)}</TableCell>
-                                                  <TableCell>
-                                                    <TextField
-                                                      size="small"
-                                                      type="number"
-                                                      placeholder="(default)"
-                                                      value={pp.addonFeeOverride !== undefined && pp.addonFeeOverride !== null ? pp.addonFeeOverride : ''}
-                                                      onChange={e => {
-                                                        const updated = productPlacements.map(x => x.id === pp.id ? { ...x, addonFeeOverride: e.target.value === '' ? undefined : parseFloat(e.target.value) } : x)
-                                                        setProductPlacements(updated)
-                                                      }}
-                                                      onBlur={e => handleUpdateProductPlacementFee(pp, e.target.value)}
-                                                      sx={{ width: 90 }}
-                                                      InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
-                                                    />
-                                                  </TableCell>
+                                                  <TableCell>{pp.addonFeeOverride != null ? `$${pp.addonFeeOverride.toFixed(2)}` : <Typography variant="body2" color="text.secondary">(default)</Typography>}</TableCell>
                                                   <TableCell>${effectiveFee.toFixed(2)}</TableCell>
-                                                  <TableCell>
-                                                    {pp.isArchived
-                                                      ? <Chip size="small" label="Archived" />
-                                                      : <Chip size="small" label="Active" color="success" />}
-                                                  </TableCell>
                                                   <TableCell align="right">
-                                                    <Tooltip title="Remove from product">
-                                                      <IconButton size="small" color="error" onClick={() => handleRemoveProductPlacement(pp)}>
-                                                        <DeleteIcon fontSize="small" />
-                                                      </IconButton>
-                                                    </Tooltip>
+                                                    <Stack direction="row" spacing={0.5} justifyContent="flex-end">
+                                                      <Tooltip title="Edit fee override">
+                                                        <IconButton size="small" onClick={() => {
+                                                          setEditingProductPlacement(pp)
+                                                          setProductPlacementFeeOverride(pp.addonFeeOverride != null ? String(pp.addonFeeOverride) : '')
+                                                          setProductPlacementDialogOpen(true)
+                                                        }}>
+                                                          <EditIcon fontSize="small" />
+                                                        </IconButton>
+                                                      </Tooltip>
+                                                      <Tooltip title="Remove from product">
+                                                        <IconButton size="small" color="error" onClick={() => handleRemoveProductPlacement(pp)}>
+                                                          <DeleteIcon fontSize="small" />
+                                                        </IconButton>
+                                                      </Tooltip>
+                                                    </Stack>
                                                   </TableCell>
                                                 </TableRow>
                                               )
@@ -2917,13 +3779,13 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                       )}
                     </TableBody>
                   </Table>
-                </Paper>
-              </>
+                </Paper>}
+              </Paper>
             )}
 
             {/* Pricing Tab */}
             {activeTab === 3 && (
-              <Paper sx={{ p: 3, maxHeight: 'calc(100vh - 200px)', overflowY: 'auto', width: '100%' }}>
+              <Paper sx={{ p: 3 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                   <Typography variant="h6">Pricing Matrix</Typography>
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
@@ -3380,6 +4242,74 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
         </DialogActions>
       </Dialog>
 
+      {/* Product Placement Edit Dialog */}
+      {editingProductPlacement && (
+        <Dialog open={productPlacementDialogOpen} onClose={() => { setProductPlacementDialogOpen(false); setEditingProductPlacement(null) }} maxWidth="xs" fullWidth>
+          <DialogTitle>Edit Fee Override</DialogTitle>
+          <DialogContent>
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              <Typography variant="body2" color="text.secondary">
+                {placements.find(p => p.id === editingProductPlacement.placementId)?.name}
+                {' — default $'}{(placements.find(p => p.id === editingProductPlacement.placementId)?.defaultAddonFee ?? 0).toFixed(2)}
+              </Typography>
+              <TextField
+                label="Fee Override (leave blank to use default)"
+                type="number"
+                fullWidth
+                autoFocus
+                value={productPlacementFeeOverride}
+                onChange={e => setProductPlacementFeeOverride(e.target.value)}
+                inputProps={{ step: 0.01, min: 0 }}
+                InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => { setProductPlacementDialogOpen(false); setEditingProductPlacement(null) }}>Cancel</Button>
+            <Button variant="contained" onClick={() => handleUpdateProductPlacementFee(editingProductPlacement, productPlacementFeeOverride)}>Save</Button>
+          </DialogActions>
+        </Dialog>
+      )}
+
+      {/* Placement Dialog */}
+      <Dialog open={placementDialogOpen} onClose={() => { setPlacementDialogOpen(false); setEditingPlacement(null); setPlacementForm({ name: '', description: '', defaultAddonFee: 0 }) }} maxWidth="sm" fullWidth>
+        <DialogTitle>{editingPlacement ? 'Edit Placement' : 'Add Placement'}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField
+              label="Name"
+              fullWidth
+              value={placementForm.name}
+              onChange={e => setPlacementForm(f => ({ ...f, name: e.target.value }))}
+              required
+              autoFocus
+            />
+            <TextField
+              label="Description (optional)"
+              fullWidth
+              value={placementForm.description}
+              onChange={e => setPlacementForm(f => ({ ...f, description: e.target.value }))}
+            />
+            <TextField
+              label="Default Addon Fee ($)"
+              type="number"
+              fullWidth
+              value={placementForm.defaultAddonFee === 0 ? 0 : placementForm.defaultAddonFee || ''}
+              onChange={e => {
+                const val = e.target.value === '' ? 0 : parseFloat(e.target.value)
+                setPlacementForm(f => ({ ...f, defaultAddonFee: isNaN(val) ? 0 : val }))
+              }}
+              inputProps={{ step: 0.01, min: 0 }}
+              InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setPlacementDialogOpen(false); setEditingPlacement(null); setPlacementForm({ name: '', description: '', defaultAddonFee: 0 }) }}>Cancel</Button>
+          <Button variant="contained" disabled={!placementForm.name.trim()} onClick={handleSavePlacement}>Save</Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Product Dialog */}
       <Dialog open={productDialogOpen} onClose={() => setProductDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>{editingProduct ? 'Edit Product' : 'Add Product'}</DialogTitle>
@@ -3409,7 +4339,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
               label="Base Price ($)" 
               type="number" 
               fullWidth 
-              value={productForm.basePrice || ''} 
+              value={productForm.basePrice === 0 ? 0 : productForm.basePrice || ''}
               onChange={(e) => {
                 const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
                 setProductForm({ ...productForm, basePrice: isNaN(val) ? 0 : val });
@@ -3432,7 +4362,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
               <Button 
                 variant="contained" 
                 onClick={handleSaveProduct}
-                disabled={!productForm.name.trim() || !productForm.widthInches || productForm.widthInches <= 0 || !productForm.basePrice || productForm.basePrice < 0}
+                disabled={!productForm.name.trim() || !productForm.widthInches || productForm.widthInches <= 0 || productForm.basePrice < 0}
               >
                 Save
               </Button>
@@ -3440,6 +4370,202 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
           </Tooltip>
         </DialogActions>
       </Dialog>
+
+      {/* Section Dialog */}
+      <Dialog open={sectionDialogOpen} onClose={() => { setSectionDialogOpen(false); setEditingSection(null); setSectionForm({ name: '', description: '', defaultAddonFee: 0 }) }} maxWidth="sm" fullWidth>
+        <DialogTitle>{editingSection ? 'Edit Section' : 'Add Section'}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField label="Name" fullWidth value={sectionForm.name} onChange={e => setSectionForm(f => ({ ...f, name: e.target.value }))} required autoFocus />
+            <TextField label="Description (optional)" fullWidth value={sectionForm.description} onChange={e => setSectionForm(f => ({ ...f, description: e.target.value }))} />
+            <TextField
+              label="Default Addon Fee ($)" type="number" fullWidth
+              value={sectionForm.defaultAddonFee === 0 ? 0 : sectionForm.defaultAddonFee || ''}
+              onChange={e => { const val = e.target.value === '' ? 0 : parseFloat(e.target.value); setSectionForm(f => ({ ...f, defaultAddonFee: isNaN(val) ? 0 : val })) }}
+              inputProps={{ step: 0.01, min: 0 }}
+              InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setSectionDialogOpen(false); setEditingSection(null); setSectionForm({ name: '', description: '', defaultAddonFee: 0 }) }}>Cancel</Button>
+          <Button variant="contained" disabled={!sectionForm.name.trim()} onClick={handleSaveSection}>Save</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* SubSection Dialog */}
+      <Dialog open={subSectionDialogOpen} onClose={() => { setSubSectionDialogOpen(false); setEditingSubSection(null); setSubSectionForm({ name: '', description: '', defaultAddonFee: 0 }) }} maxWidth="sm" fullWidth>
+        <DialogTitle>{editingSubSection ? 'Edit Sub-Section' : 'Add Sub-Section'}</DialogTitle>
+        <DialogContent>
+          <Stack spacing={2} sx={{ mt: 1 }}>
+            <TextField label="Name" fullWidth value={subSectionForm.name} onChange={e => setSubSectionForm(f => ({ ...f, name: e.target.value }))} required autoFocus />
+            <TextField label="Description (optional)" fullWidth value={subSectionForm.description} onChange={e => setSubSectionForm(f => ({ ...f, description: e.target.value }))} />
+            <TextField
+              label="Default Addon Fee ($)" type="number" fullWidth
+              value={subSectionForm.defaultAddonFee === 0 ? 0 : subSectionForm.defaultAddonFee || ''}
+              onChange={e => { const val = e.target.value === '' ? 0 : parseFloat(e.target.value); setSubSectionForm(f => ({ ...f, defaultAddonFee: isNaN(val) ? 0 : val })) }}
+              inputProps={{ step: 0.01, min: 0 }}
+              InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { setSubSectionDialogOpen(false); setEditingSubSection(null); setSubSectionForm({ name: '', description: '', defaultAddonFee: 0 }) }}>Cancel</Button>
+          <Button variant="contained" disabled={!subSectionForm.name.trim()} onClick={handleSaveSubSection}>Save</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ProductSection fee override dialog */}
+      {editingProductSection && (
+        <Dialog open={productSectionDialogOpen} onClose={() => { setProductSectionDialogOpen(false); setEditingProductSection(null) }} maxWidth="xs" fullWidth>
+          <DialogTitle>Edit Section Fee Override</DialogTitle>
+          <DialogContent>
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              <Typography variant="body2" color="text.secondary">
+                {sections.find(s => s.id === editingProductSection.sectionId)?.name}
+                {' — default $'}{(sections.find(s => s.id === editingProductSection.sectionId)?.defaultAddonFee ?? 0).toFixed(2)}
+              </Typography>
+              <TextField
+                label="Fee Override (leave blank to use default)" type="number" fullWidth autoFocus
+                value={productSectionFeeOverride}
+                onChange={e => setProductSectionFeeOverride(e.target.value)}
+                inputProps={{ step: 0.01, min: 0 }}
+                InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => { setProductSectionDialogOpen(false); setEditingProductSection(null) }}>Cancel</Button>
+            <Button variant="contained" onClick={() => handleUpdateProductSectionFee(editingProductSection, productSectionFeeOverride)}>Save</Button>
+          </DialogActions>
+        </Dialog>
+      )}
+
+      {/* SectionSubSection fee override dialog */}
+      {editingSectionSubSection && (
+        <Dialog open={sectionSubSectionDialogOpen} onClose={() => { setSectionSubSectionDialogOpen(false); setEditingSectionSubSection(null) }} maxWidth="xs" fullWidth>
+          <DialogTitle>Edit Sub-Section Fee Override</DialogTitle>
+          <DialogContent>
+            <Stack spacing={2} sx={{ mt: 1 }}>
+              <Typography variant="body2" color="text.secondary">
+                {subSections.find(s => s.id === editingSectionSubSection.subSectionId)?.name}
+                {' — default $'}{(subSections.find(s => s.id === editingSectionSubSection.subSectionId)?.defaultAddonFee ?? 0).toFixed(2)}
+              </Typography>
+              <TextField
+                label="Fee Override (leave blank to use default)" type="number" fullWidth autoFocus
+                value={sectionSubSectionFeeOverride}
+                onChange={e => setSectionSubSectionFeeOverride(e.target.value)}
+                inputProps={{ step: 0.01, min: 0 }}
+                InputProps={{ startAdornment: <InputAdornment position="start">$</InputAdornment> }}
+              />
+            </Stack>
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => { setSectionSubSectionDialogOpen(false); setEditingSectionSubSection(null) }}>Cancel</Button>
+            <Button variant="contained" onClick={() => handleUpdateSectionSubSectionFee(editingSectionSubSection, sectionSubSectionFeeOverride)}>Save</Button>
+          </DialogActions>
+        </Dialog>
+      )}
+
+      {/* Add Sections to Product checklist dialog */}
+      {addSectionsToProductId && (
+        <Dialog open={addSectionsToProductOpen} onClose={() => { setAddSectionsToProductOpen(false); setSelectedSectionIds([]) }} maxWidth="sm" fullWidth>
+          <DialogTitle>Add Sections to {products.find(p => p.id === addSectionsToProductId)?.name}</DialogTitle>
+          <DialogContent>
+            {(() => {
+              const assignedIds = productSections.map(ps => ps.sectionId)
+              const available = sections.filter(s => !s.isArchived && !assignedIds.includes(s.id))
+              return available.length === 0 ? (
+                <Typography color="text.secondary">All sections are already assigned.</Typography>
+              ) : (
+                <List dense>
+                  {available.map(s => (
+                    <ListItem key={s.id} disablePadding>
+                      <FormControlLabel
+                        sx={{ width: '100%', mx: 0 }}
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={selectedSectionIds.includes(s.id)}
+                            onChange={e => setSelectedSectionIds(prev => e.target.checked ? [...prev, s.id] : prev.filter(id => id !== s.id))}
+                          />
+                        }
+                        label={
+                          <Stack direction="row" justifyContent="space-between" sx={{ width: '100%', pr: 2 }}>
+                            <Typography variant="body2">{s.name}</Typography>
+                            <Typography variant="body2" color="text.secondary">${(s.defaultAddonFee || 0).toFixed(2)}</Typography>
+                          </Stack>
+                        }
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              )
+            })()}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => { setAddSectionsToProductOpen(false); setSelectedSectionIds([]) }}>Cancel</Button>
+            <Button onClick={() => {
+              const assignedIds = productSections.map(ps => ps.sectionId)
+              const allIds = sections.filter(s => !s.isArchived && !assignedIds.includes(s.id)).map(s => s.id)
+              handleAddSectionsToProduct(addSectionsToProductId!, allIds)
+            }}>Add All</Button>
+            <Button variant="contained" disabled={selectedSectionIds.length === 0} onClick={() => handleAddSectionsToProduct(addSectionsToProductId!, selectedSectionIds)}>
+              Add Selected
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
+
+      {/* Add Sub-Sections to Section checklist dialog */}
+      {addSubSectionsToSectionId && (
+        <Dialog open={addSubSectionsToSectionOpen} onClose={() => { setAddSubSectionsToSectionOpen(false); setSelectedSubSectionIds([]) }} maxWidth="sm" fullWidth>
+          <DialogTitle>Add Sub-Sections to {sections.find(s => s.id === addSubSectionsToSectionId)?.name}</DialogTitle>
+          <DialogContent>
+            {(() => {
+              const assignedIds = sectionSubSections.map(ss => ss.subSectionId)
+              const available = subSections.filter(ss => !ss.isArchived && !assignedIds.includes(ss.id))
+              return available.length === 0 ? (
+                <Typography color="text.secondary">All sub-sections are already assigned.</Typography>
+              ) : (
+                <List dense>
+                  {available.map(ss => (
+                    <ListItem key={ss.id} disablePadding>
+                      <FormControlLabel
+                        sx={{ width: '100%', mx: 0 }}
+                        control={
+                          <Checkbox
+                            size="small"
+                            checked={selectedSubSectionIds.includes(ss.id)}
+                            onChange={e => setSelectedSubSectionIds(prev => e.target.checked ? [...prev, ss.id] : prev.filter(id => id !== ss.id))}
+                          />
+                        }
+                        label={
+                          <Stack direction="row" justifyContent="space-between" sx={{ width: '100%', pr: 2 }}>
+                            <Typography variant="body2">{ss.name}</Typography>
+                            <Typography variant="body2" color="text.secondary">${(ss.defaultAddonFee || 0).toFixed(2)}</Typography>
+                          </Stack>
+                        }
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              )
+            })()}
+          </DialogContent>
+          <DialogActions>
+            <Button onClick={() => { setAddSubSectionsToSectionOpen(false); setSelectedSubSectionIds([]) }}>Cancel</Button>
+            <Button onClick={() => {
+              const assignedIds = sectionSubSections.map(ss => ss.subSectionId)
+              const allIds = subSections.filter(ss => !ss.isArchived && !assignedIds.includes(ss.id)).map(ss => ss.id)
+              handleAddSubSectionsToSection(addSubSectionsToSectionId!, allIds)
+            }}>Add All</Button>
+            <Button variant="contained" disabled={selectedSubSectionIds.length === 0} onClick={() => handleAddSubSectionsToSection(addSubSectionsToSectionId!, selectedSubSectionIds)}>
+              Add Selected
+            </Button>
+          </DialogActions>
+        </Dialog>
+      )}
 
       <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar({ ...snackbar, open: false })}>
         <Alert severity={snackbar.severity}>{snackbar.message}</Alert>

@@ -22,6 +22,8 @@ export const getAd = /* GraphQL */ `
       createdAt
       updatedAt
       placementIds
+      sectionIds
+      subSectionIds
       __typename
     }
   }
@@ -48,6 +50,8 @@ export const listAds = /* GraphQL */ `
         createdAt
         updatedAt
         placementIds
+        sectionIds
+        subSectionIds
         __typename
       }
       nextToken
@@ -291,6 +295,138 @@ export const listProductPlacements = /* GraphQL */ `
         id
         productId
         placementId
+        addonFeeOverride
+        isArchived
+        createdAt
+        updatedAt
+        __typename
+      }
+      nextToken
+      __typename
+    }
+  }
+`;
+export const getSection = /* GraphQL */ `
+  query GetSection($id: ID!) {
+    getSection(id: $id) {
+      id
+      name
+      description
+      defaultAddonFee
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+  }
+`;
+export const listSections = /* GraphQL */ `
+  query ListSections($filter: ModelSectionFilterInput, $limit: Int, $nextToken: String) {
+    listSections(filter: $filter, limit: $limit, nextToken: $nextToken) {
+      items {
+        id
+        name
+        description
+        defaultAddonFee
+        isArchived
+        createdAt
+        updatedAt
+        __typename
+      }
+      nextToken
+      __typename
+    }
+  }
+`;
+export const getSubSection = /* GraphQL */ `
+  query GetSubSection($id: ID!) {
+    getSubSection(id: $id) {
+      id
+      name
+      description
+      defaultAddonFee
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+  }
+`;
+export const listSubSections = /* GraphQL */ `
+  query ListSubSections($filter: ModelSubSectionFilterInput, $limit: Int, $nextToken: String) {
+    listSubSections(filter: $filter, limit: $limit, nextToken: $nextToken) {
+      items {
+        id
+        name
+        description
+        defaultAddonFee
+        isArchived
+        createdAt
+        updatedAt
+        __typename
+      }
+      nextToken
+      __typename
+    }
+  }
+`;
+export const getProductSection = /* GraphQL */ `
+  query GetProductSection($id: ID!) {
+    getProductSection(id: $id) {
+      id
+      productId
+      sectionId
+      sortOrder
+      addonFeeOverride
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+  }
+`;
+export const listProductSections = /* GraphQL */ `
+  query ListProductSections($filter: ModelProductSectionFilterInput, $limit: Int, $nextToken: String) {
+    listProductSections(filter: $filter, limit: $limit, nextToken: $nextToken) {
+      items {
+        id
+        productId
+        sectionId
+        sortOrder
+        addonFeeOverride
+        isArchived
+        createdAt
+        updatedAt
+        __typename
+      }
+      nextToken
+      __typename
+    }
+  }
+`;
+export const getSectionSubSection = /* GraphQL */ `
+  query GetSectionSubSection($id: ID!) {
+    getSectionSubSection(id: $id) {
+      id
+      sectionId
+      subSectionId
+      sortOrder
+      addonFeeOverride
+      isArchived
+      createdAt
+      updatedAt
+      __typename
+    }
+  }
+`;
+export const listSectionSubSections = /* GraphQL */ `
+  query ListSectionSubSections($filter: ModelSectionSubSectionFilterInput, $limit: Int, $nextToken: String) {
+    listSectionSubSections(filter: $filter, limit: $limit, nextToken: $nextToken) {
+      items {
+        id
+        sectionId
+        subSectionId
+        sortOrder
         addonFeeOverride
         isArchived
         createdAt
