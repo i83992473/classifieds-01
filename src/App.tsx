@@ -66,10 +66,12 @@ import CreateIcon from '@mui/icons-material/Create'
 import DescriptionIcon from '@mui/icons-material/Description'
 import ImageIcon from '@mui/icons-material/Image'
 import GetStartedIcon from '@mui/icons-material/ArrowForward'
+import DownloadIcon from '@mui/icons-material/Download'
 import Badge from '@mui/material/Badge'
 import Chip from '@mui/material/Chip'
 import jsPDF from 'jspdf'
 import html2canvas from 'html2canvas'
+import JSZip from 'jszip'
 import AdminDashboard from './AdminDashboard'
 import MessagesDialog from './MessagesDialog'
 import PaymentDialog from './PaymentDialog'
@@ -393,6 +395,8 @@ function App() {
   // Menu states
   const [userMenuAnchor, setUserMenuAnchor] = useState<null | HTMLElement>(null)
   const [adsDialogOpen, setAdsDialogOpen] = useState(false)
+  const [selectedAdIds, setSelectedAdIds] = useState<Set<string>>(new Set())
+  const [isExporting, setIsExporting] = useState(false)
   
   // Snackbar for notifications
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'info' }>({
@@ -1743,234 +1747,211 @@ function App() {
     }
   }
 
-  // Export ad as PDF - function kept for future use
-  // @ts-expect-error - Function is kept for future use
-  const exportToPDF = async () => {
-    if (!adPreviewRef.current) {
-      setSnackbar({ open: true, message: 'Unable to export ad preview', severity: 'error' })
-      return
+  // Render an ad off-screen from its saved data and return a PDF blob
+  const renderAdToPDFBlob = async (ad: Ad): Promise<Blob> => {
+    // Parse blocks
+    const parsedBlocks: Block[] = ad.blocks ? JSON.parse(ad.blocks) : []
+
+    // Parse ad settings from content field
+    let adBorderStyle: BorderStyle = 'none'
+    let adCornerStyle: CornerStyle = 'flat'
+    let adPaddingStyle: AdPadding = 'medium'
+    if (ad.content) {
+      try {
+        const settings = JSON.parse(ad.content) as {
+          borderStyle?: BorderStyle;
+          cornerStyle?: CornerStyle;
+          adPadding?: AdPadding;
+        }
+        adBorderStyle = settings.borderStyle || 'none'
+        adCornerStyle = settings.cornerStyle || 'flat'
+        adPaddingStyle = settings.adPadding || 'medium'
+      } catch { /* use defaults */ }
     }
 
-    setIsSaving(true)
-    try {
-      // Step 1: Convert all images to base64 and wait for each one
-      const imageBlocks = blocks.filter((b): b is ImageBlock => b.type === 'image')
-      const imageBase64Map = new Map<string, string>()
-      
-      console.log('Converting', imageBlocks.length, 'images to base64...')
-      for (const block of imageBlocks) {
+    const widthInches = ad.widthInches || 3
+    const widthPx = widthInches * 96
+
+    // Resolve image URLs from S3 keys
+    const resolvedBlocks = await Promise.all(
+      parsedBlocks.map(async (block) => {
+        if (block.type === 'image' && block.s3Key) {
+          const url = await getImageUrl(block.s3Key)
+          return { ...block, src: url }
+        }
+        return block
+      })
+    )
+
+    // Convert images to base64 for reliable canvas capture
+    const imageBase64Map = new Map<string, string>()
+    for (const block of resolvedBlocks) {
+      if (block.type === 'image' && block.src) {
         try {
-          console.log('Converting image:', block.id, block.src)
           const base64 = await imageToBase64(block.src)
           imageBase64Map.set(block.id, base64)
-          console.log('Successfully converted image:', block.id)
-        } catch (error) {
-          console.error('Failed to convert image to base64:', block.id, error)
-          // Don't fail completely - continue without this image
-        }
+        } catch { /* continue without this image */ }
       }
+    }
 
-      // Step 2: Replace image sources with base64 versions
-      const imageElements = Array.from(adPreviewRef.current.querySelectorAll('img'))
-      const originalSrcs: Map<HTMLImageElement, string> = new Map()
-      
-      console.log('Found', imageElements.length, 'image elements in DOM')
-      
-      // Create a map of block IDs to image elements by matching with blocks array
-      const blockIdToImgMap = new Map<string, HTMLImageElement>()
-      
-      imageBlocks.forEach((block) => {
-        const img = imageElements.find((imgEl) => {
-          // Check if this image's parent has the matching block-id
-          let parent = imgEl.parentElement
-          while (parent && parent !== adPreviewRef.current) {
-            if (parent.getAttribute('data-block-id') === block.id) {
-              return true
-            }
-            parent = parent.parentElement
-          }
-          return false
-        })
-        if (img) {
-          blockIdToImgMap.set(block.id, img)
-        }
-      })
-      
-      console.log('Mapped', blockIdToImgMap.size, 'images to blocks')
-      
-      // Replace each image with its base64 version
-      blockIdToImgMap.forEach((img, blockId) => {
-        originalSrcs.set(img, img.src)
-        if (imageBase64Map.has(blockId)) {
-          const base64Url = imageBase64Map.get(blockId)!
-          console.log('Replacing image source for block', blockId)
-          // Remove crossOrigin attributes for base64 images
-          img.removeAttribute('crossOrigin')
-          img.removeAttribute('crossorigin')
-          img.crossOrigin = null
-          img.src = base64Url
-        }
-      })
+    // Create off-screen container
+    const container = document.createElement('div')
+    container.style.position = 'absolute'
+    container.style.left = '-9999px'
+    container.style.top = '0'
+    document.body.appendChild(container)
 
-      // Step 3: Wait for all replaced images to fully load
-      const loadPromises: Promise<void>[] = []
-      blockIdToImgMap.forEach((img, blockId) => {
-        // Check if image is already loaded (for base64, this might be immediate)
-        if (img.complete && img.naturalHeight > 0 && img.naturalWidth > 0) {
-          console.log('Image already loaded:', blockId, img.naturalWidth, 'x', img.naturalHeight)
-          return // Already loaded
-        }
-        console.log('Waiting for image to load')
-        loadPromises.push(
-          new Promise((resolve) => {
-            const timeout = setTimeout(() => {
-              console.warn(`Image load timeout: ${blockId}`)
-              // Don't reject, just resolve - continue even if timeout
-              resolve()
-            }, 10000) // Increased timeout
-            
-            const checkComplete = () => {
-              if (img.complete && img.naturalHeight > 0 && img.naturalWidth > 0) {
-                clearTimeout(timeout)
-                console.log('Image loaded:', blockId, img.naturalWidth, 'x', img.naturalHeight)
-                resolve()
-              }
-            }
-            
-            img.onload = () => {
-              clearTimeout(timeout)
-              console.log('Image onload fired:', blockId, img.naturalWidth, 'x', img.naturalHeight)
-              resolve()
-            }
-            img.onerror = () => {
-              clearTimeout(timeout)
-              console.error('Image failed to load:', blockId, img.src.substring(0, 100))
-              // Don't reject, just resolve - continue even if image fails
-              resolve()
-            }
-            
-            // Check immediately in case it's already loaded
-            checkComplete()
-          })
-        )
-      })
+    // Create the ad preview element
+    const adEl = document.createElement('div')
+    adEl.style.width = `${widthPx}px`
+    adEl.style.backgroundColor = '#ffffff'
+    adEl.style.border = BORDER_STYLE_MAP[adBorderStyle]
+    adEl.style.borderRadius = `${CORNER_STYLE_MAP[adCornerStyle]}px`
+    adEl.style.padding = `${PADDING_MAP[adPaddingStyle]}px`
+    adEl.style.boxSizing = 'border-box'
+    container.appendChild(adEl)
 
-      if (loadPromises.length > 0) {
-        await Promise.all(loadPromises) // Wait for all to complete
+    // Render each block
+    for (const block of resolvedBlocks) {
+      if (block.type === 'text') {
+        const textEl = document.createElement('div')
+        textEl.textContent = block.text
+        textEl.style.fontWeight = block.bold ? 'bold' : 'normal'
+        textEl.style.fontStyle = block.italic ? 'italic' : 'normal'
+        textEl.style.textDecoration = block.underline ? 'underline' : 'none'
+        textEl.style.fontSize = `${block.fontSize || TEXT_SIZE_MAP[block.size || 'medium']}px`
+        textEl.style.fontFamily = FONT_MAP[block.font || 'serif']
+        textEl.style.textAlign = block.alignment || 'left'
+        textEl.style.color = HIGHLIGHT_STYLE_MAP[block.highlight || 'none'].color
+        textEl.style.backgroundColor = HIGHLIGHT_STYLE_MAP[block.highlight || 'none'].backgroundColor
+        textEl.style.lineHeight = '1.4'
+        textEl.style.width = '100%'
+        if (block.highlight && block.highlight !== 'none') {
+          textEl.style.paddingLeft = '4px'
+          textEl.style.paddingRight = '4px'
+          textEl.style.paddingTop = '2px'
+          textEl.style.paddingBottom = '2px'
+        }
+        adEl.appendChild(textEl)
+      } else if (block.type === 'image') {
+        const wrapper = document.createElement('div')
+        wrapper.style.display = 'flex'
+        wrapper.style.justifyContent = 'center'
+        wrapper.style.width = '100%'
+        const img = document.createElement('img')
+        img.src = imageBase64Map.get(block.id) || block.src
+        img.style.display = 'block'
+        img.style.width = '100%'
+        img.style.height = 'auto'
+        wrapper.appendChild(img)
+        adEl.appendChild(wrapper)
       }
-      console.log('All image loading promises completed, waiting additional time for rendering...')
-      // Additional wait to ensure DOM has updated
-      await new Promise(resolve => setTimeout(resolve, 500))
+    }
 
-      // Step 4: Capture the ad preview as canvas
-      console.log('Capturing canvas...')
-      const canvas = await html2canvas(adPreviewRef.current, {
-        scale: 2,
-        backgroundColor: '#ffffff',
-        useCORS: true,
-        allowTaint: true,
-        logging: true, // Enable logging to debug
-        imageTimeout: 15000,
-        onclone: (clonedDoc) => {
-          // Verify images are in the cloned document
-          const clonedImages = clonedDoc.querySelectorAll('img')
-          console.log('Cloned document has', clonedImages.length, 'images')
-          clonedImages.forEach((img, idx) => {
-            console.log(`Cloned image ${idx}:`, img.src.substring(0, 100))
-          })
-        }
+    // Wait for all images to load
+    const images = Array.from(adEl.querySelectorAll('img'))
+    await Promise.all(images.map(img =>
+      img.complete ? Promise.resolve() : new Promise<void>(resolve => {
+        img.onload = () => resolve()
+        img.onerror = () => resolve()
+        setTimeout(resolve, 10000)
       })
+    ))
+    // Small delay for rendering
+    await new Promise(resolve => setTimeout(resolve, 300))
 
-      console.log('Canvas captured:', canvas.width, 'x', canvas.height)
+    // Capture with html2canvas
+    const canvas = await html2canvas(adEl, {
+      scale: 2,
+      backgroundColor: '#ffffff',
+      useCORS: true,
+      allowTaint: true,
+      imageTimeout: 15000,
+    })
 
-      // Step 5: Restore original image sources
-      blockIdToImgMap.forEach((img) => {
-        const originalSrc = originalSrcs.get(img)
-        if (originalSrc) {
-          img.src = originalSrc
-        }
-      })
+    // Clean up off-screen container
+    document.body.removeChild(container)
 
-      // Step 6: Calculate PDF dimensions based on actual ad size
-      const pdfWidthInches = adWidthInches
-      const canvasScale = 2
-      
-      // The canvas was captured at 2x scale, so actual pixels = canvas dimensions / 2
-      const actualCanvasWidthPx = canvas.width / canvasScale
-      const actualCanvasHeightPx = canvas.height / canvasScale
-      
-      // The ad preview is rendered at adWidthInches * 96 pixels wide
-      // The captured canvas should match this width at actualCanvasWidthPx
-      // Calculate height maintaining aspect ratio
-      const aspectRatio = actualCanvasHeightPx / actualCanvasWidthPx
-      const pdfHeightInches = pdfWidthInches * aspectRatio
-      
-      console.log('PDF dimensions:', pdfWidthInches, 'x', pdfHeightInches, 'inches')
-      console.log('Canvas dimensions:', actualCanvasWidthPx, 'x', actualCanvasHeightPx, 'pixels')
-      console.log('Aspect ratio:', aspectRatio)
-      
-      // Step 7: Create PDF with exact dimensions
-      const imgData = canvas.toDataURL('image/png', 1.0)
-      
-      // jsPDF format array expects [width, height] in the specified unit
-      // Using inches as unit for clarity
-      console.log('Creating PDF with dimensions:', pdfWidthInches, 'x', pdfHeightInches, 'inches')
-      
-      // Create PDF with custom page size - format array is [width, height] in the unit specified
-      const pdf = new jsPDF({
-        orientation: pdfHeightInches > pdfWidthInches ? 'portrait' : 'landscape',
-        unit: 'in', // Use inches directly
-        format: [pdfWidthInches, pdfHeightInches], // [width, height] in inches
-        compress: true,
-      })
+    // Calculate PDF dimensions
+    const canvasScale = 2
+    const actualW = canvas.width / canvasScale
+    const actualH = canvas.height / canvasScale
+    const aspectRatio = actualH / actualW
+    const pdfH = widthInches * aspectRatio
 
-      console.log('PDF page size:', pdf.internal.pageSize.getWidth(), 'x', pdf.internal.pageSize.getHeight(), 'in')
+    // Create PDF
+    const imgData = canvas.toDataURL('image/png', 1.0)
+    const pdf = new jsPDF({
+      orientation: pdfH > widthInches ? 'portrait' : 'landscape',
+      unit: 'in',
+      format: [widthInches, pdfH],
+      compress: true,
+    })
+    pdf.addImage(imgData, 'PNG', 0, 0, widthInches, pdfH, undefined, 'FAST')
 
-      // Add the canvas image at exact size (in inches)
-      pdf.addImage(imgData, 'PNG', 0, 0, pdfWidthInches, pdfHeightInches, undefined, 'FAST')
-      
-      // Generate PDF blob
-      const pdfBlob = pdf.output('blob')
-      const pdfFile = new File([pdfBlob], `${adTitle || 'ad'}-${Date.now()}.pdf`, { type: 'application/pdf' })
-      
-      // Upload PDF to S3 (using public/ prefix for Amplify Storage)
-      const sanitizedTitle = (adTitle || 'ad').replace(/[^a-z0-9]/gi, '-').toLowerCase()
-      const pdfKey = `public/pdfs/${Date.now()}-${sanitizedTitle}.pdf`
-      await uploadData({
-        path: pdfKey,
-        data: pdfFile,
-        options: {
-          contentType: 'application/pdf'
-        }
-      }).result
+    return pdf.output('blob')
+  }
 
-      // Get signed URL for download
-      const urlResult = await getUrl({ path: pdfKey })
-      const downloadUrl = urlResult.url.toString()
-
-      // Save PDF key to database if ad exists
-      if (currentAdId) {
-        await client.graphql({
-          query: updateAd,
-          variables: { 
-            input: { 
-              id: currentAdId, 
-              pdfKey: pdfKey 
-            } 
-          },
-          authMode: 'userPool'
-        })
-      }
-
-      // Open PDF in new window
-      window.open(downloadUrl, '_blank')
-
-      setSnackbar({ open: true, message: 'PDF exported and opened in new window', severity: 'success' })
+  // Export a single ad as PDF download
+  const exportSingleAd = async (ad: Ad) => {
+    setIsExporting(true)
+    try {
+      const blob = await renderAdToPDFBlob(ad)
+      const sanitizedTitle = (ad.title || 'ad').replace(/[^a-z0-9]/gi, '-').toLowerCase()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${sanitizedTitle}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      setSnackbar({ open: true, message: 'PDF downloaded', severity: 'success' })
     } catch (error) {
-      console.error('Error exporting PDF:', error)
+      console.error('Error exporting ad:', error)
       setSnackbar({ open: true, message: 'Failed to export PDF', severity: 'error' })
     } finally {
-      setIsSaving(false)
+      setIsExporting(false)
+    }
+  }
+
+  // Export multiple selected ads as a zip of PDFs
+  const exportSelectedAds = async () => {
+    if (selectedAdIds.size === 0) return
+    setIsExporting(true)
+    try {
+      const adsToExport = savedAds.filter(ad => selectedAdIds.has(ad.id))
+
+      if (adsToExport.length === 1) {
+        // Single ad — just download the PDF directly
+        await exportSingleAd(adsToExport[0])
+        return
+      }
+
+      const zip = new JSZip()
+      for (const ad of adsToExport) {
+        const blob = await renderAdToPDFBlob(ad)
+        const sanitizedTitle = (ad.title || 'ad').replace(/[^a-z0-9]/gi, '-').toLowerCase()
+        zip.file(`${sanitizedTitle}.pdf`, blob)
+      }
+
+      const zipBlob = await zip.generateAsync({ type: 'blob' })
+      const url = URL.createObjectURL(zipBlob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `ads-export-${Date.now()}.zip`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+
+      setSnackbar({ open: true, message: `${adsToExport.length} ads exported as zip`, severity: 'success' })
+      setSelectedAdIds(new Set())
+    } catch (error) {
+      console.error('Error exporting ads:', error)
+      setSnackbar({ open: true, message: 'Failed to export ads', severity: 'error' })
+    } finally {
+      setIsExporting(false)
     }
   }
 
@@ -2350,6 +2331,19 @@ function App() {
               <Table size="small">
                 <TableHead>
                   <TableRow>
+                    <TableCell padding="checkbox">
+                      <Checkbox
+                        indeterminate={selectedAdIds.size > 0 && selectedAdIds.size < savedAds.length}
+                        checked={savedAds.length > 0 && selectedAdIds.size === savedAds.length}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setSelectedAdIds(new Set(savedAds.map(a => a.id)))
+                          } else {
+                            setSelectedAdIds(new Set())
+                          }
+                        }}
+                      />
+                    </TableCell>
                     <TableCell>Ad Name</TableCell>
                     <TableCell>Status</TableCell>
                     <TableCell>Updated</TableCell>
@@ -2364,7 +2358,7 @@ function App() {
                     let imageCount = 0
                     let textSectionsWithDecorations = 0
                     let textSectionsWithHighlights = 0
-                    
+
                     if (ad.blocks) {
                       try {
                         const parsedBlocks = JSON.parse(ad.blocks) as Block[]
@@ -2384,7 +2378,7 @@ function App() {
                         })
                       } catch { /* ignore parse errors */ }
                     }
-                    
+
                     // Calculate price estimate
                     const product = products.find(p => p.id === selectedProduct) || products[0]
                     const wordPrice = totalWords * PRICING_DATA.pricePerWord
@@ -2392,21 +2386,36 @@ function App() {
                     const decorationPrice = textSectionsWithDecorations * PRICING_DATA.pricePerDecoration
                     const highlightPrice = textSectionsWithHighlights * PRICING_DATA.pricePerHighlight
                     const totalPrice = (product?.basePrice || 0) + wordPrice + imagePrice + decorationPrice + highlightPrice
-                    
+
                     // Get approval status
                     const status = ad.status || 'DRAFT'
-                    
+
                     return (
-                      <TableRow 
-                        key={ad.id} 
-                        hover 
+                      <TableRow
+                        key={ad.id}
+                        hover
                         sx={{ cursor: 'pointer' }}
+                        selected={selectedAdIds.has(ad.id)}
                         onClick={() => {
                           setAdsDialogOpen(false)
                           setShowLandingPage(false)
                           loadAd(ad.id)
                         }}
                       >
+                        <TableCell padding="checkbox" onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={selectedAdIds.has(ad.id)}
+                            onChange={(e) => {
+                              const next = new Set(selectedAdIds)
+                              if (e.target.checked) {
+                                next.add(ad.id)
+                              } else {
+                                next.delete(ad.id)
+                              }
+                              setSelectedAdIds(next)
+                            }}
+                          />
+                        </TableCell>
                         <TableCell sx={{ py: 2 }}>
                           <Typography variant="subtitle2" fontWeight={600}>
                             {ad.title}
@@ -2448,8 +2457,20 @@ function App() {
                         </TableCell>
                         <TableCell align="right" sx={{ py: 2 }}>
                           <Stack direction="row" spacing={1} justifyContent="flex-end">
-                            <Button 
-                              size="small" 
+                            <Tooltip title="Export as PDF">
+                              <IconButton
+                                size="small"
+                                disabled={isExporting}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  exportSingleAd(ad)
+                                }}
+                              >
+                                {isExporting ? <CircularProgress size={18} /> : <DownloadIcon fontSize="small" />}
+                              </IconButton>
+                            </Tooltip>
+                            <Button
+                              size="small"
                               variant="outlined"
                               onClick={(e) => {
                                 e.stopPropagation()
@@ -2460,8 +2481,8 @@ function App() {
                             >
                               Edit
                             </Button>
-                            <Button 
-                              size="small" 
+                            <Button
+                              size="small"
                               color="error"
                               onClick={async (e) => {
                                 e.stopPropagation()
@@ -2502,7 +2523,18 @@ function App() {
             )}
           </DialogContent>
           <DialogActions>
-            <Button onClick={() => setAdsDialogOpen(false)}>Close</Button>
+            {selectedAdIds.size > 0 && (
+              <Button
+                variant="contained"
+                startIcon={isExporting ? <CircularProgress size={16} color="inherit" /> : <DownloadIcon />}
+                disabled={isExporting}
+                onClick={exportSelectedAds}
+                sx={{ mr: 'auto' }}
+              >
+                Export {selectedAdIds.size} ad{selectedAdIds.size > 1 ? 's' : ''}
+              </Button>
+            )}
+            <Button onClick={() => { setAdsDialogOpen(false); setSelectedAdIds(new Set()) }}>Close</Button>
           </DialogActions>
         </Dialog>
 
@@ -2791,6 +2823,19 @@ function App() {
             <Table size="small">
               <TableHead>
                 <TableRow>
+                  <TableCell padding="checkbox">
+                    <Checkbox
+                      indeterminate={selectedAdIds.size > 0 && selectedAdIds.size < savedAds.length}
+                      checked={savedAds.length > 0 && selectedAdIds.size === savedAds.length}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          setSelectedAdIds(new Set(savedAds.map(a => a.id)))
+                        } else {
+                          setSelectedAdIds(new Set())
+                        }
+                      }}
+                    />
+                  </TableCell>
                   <TableCell>Ad Name</TableCell>
                   <TableCell>Status</TableCell>
                   <TableCell>Updated</TableCell>
@@ -2805,7 +2850,7 @@ function App() {
                   let imageCount = 0
                   let textSectionsWithDecorations = 0
                   let textSectionsWithHighlights = 0
-                  
+
                   if (ad.blocks) {
                     try {
                       const parsedBlocks = JSON.parse(ad.blocks) as Block[]
@@ -2825,30 +2870,44 @@ function App() {
                       })
                     } catch { /* ignore parse errors */ }
                   }
-                  
+
                   // Calculate price estimate
-                    const product = products.find(p => p.id === selectedProduct) || products[0]
+                  const product = products.find(p => p.id === selectedProduct) || products[0]
                   const wordPrice = totalWords * PRICING_DATA.pricePerWord
                   const imagePrice = imageCount * PRICING_DATA.pricePerImage
                   const decorationPrice = textSectionsWithDecorations * PRICING_DATA.pricePerDecoration
                   const highlightPrice = textSectionsWithHighlights * PRICING_DATA.pricePerHighlight
                   const totalPrice = (product?.basePrice || 0) + wordPrice + imagePrice + decorationPrice + highlightPrice
-                  
+
                   // Get approval status
-                  const isApproved = ad.approved || false
                   const status = ad.status || 'DRAFT'
-                  
+
                   return (
-                    <TableRow 
-                      key={ad.id} 
-                      hover 
+                    <TableRow
+                      key={ad.id}
+                      hover
                       sx={{ cursor: 'pointer' }}
+                      selected={selectedAdIds.has(ad.id)}
                       onClick={() => {
                         setAdsDialogOpen(false)
                         setShowLandingPage(false)
                         loadAd(ad.id)
                       }}
                     >
+                      <TableCell padding="checkbox" onClick={(e) => e.stopPropagation()}>
+                        <Checkbox
+                          checked={selectedAdIds.has(ad.id)}
+                          onChange={(e) => {
+                            const next = new Set(selectedAdIds)
+                            if (e.target.checked) {
+                              next.add(ad.id)
+                            } else {
+                              next.delete(ad.id)
+                            }
+                            setSelectedAdIds(next)
+                          }}
+                        />
+                      </TableCell>
                       <TableCell sx={{ py: 2 }}>
                         <Typography variant="subtitle2" fontWeight={600}>
                           {ad.title}
@@ -2859,8 +2918,22 @@ function App() {
                       </TableCell>
                       <TableCell sx={{ py: 2 }}>
                         <Chip
-                          label={isApproved ? 'Approved' : status === 'PENDING_APPROVAL' ? 'Pending' : 'Draft'}
-                          color={isApproved ? 'success' : status === 'PENDING_APPROVAL' ? 'warning' : 'default'}
+                          label={
+                            status === 'PUBLISHED' ? 'Published' :
+                            status === 'APPROVED' ? 'Approved' :
+                            status === 'PENDING_APPROVAL' ? 'Pending' :
+                            status === 'NOT_APPROVED' ? 'Not Approved' :
+                            status === 'ARCHIVED' ? 'Archived' :
+                            'Draft'
+                          }
+                          color={
+                            status === 'PUBLISHED' ? 'success' :
+                            status === 'APPROVED' ? 'success' :
+                            status === 'PENDING_APPROVAL' ? 'warning' :
+                            status === 'NOT_APPROVED' ? 'error' :
+                            status === 'ARCHIVED' ? 'default' :
+                            'default'
+                          }
                           size="small"
                         />
                       </TableCell>
@@ -2876,8 +2949,20 @@ function App() {
                       </TableCell>
                       <TableCell align="right" sx={{ py: 2 }}>
                         <Stack direction="row" spacing={1} justifyContent="flex-end">
-                          <Button 
-                            size="small" 
+                          <Tooltip title="Export as PDF">
+                            <IconButton
+                              size="small"
+                              disabled={isExporting}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                exportSingleAd(ad)
+                              }}
+                            >
+                              {isExporting ? <CircularProgress size={18} /> : <DownloadIcon fontSize="small" />}
+                            </IconButton>
+                          </Tooltip>
+                          <Button
+                            size="small"
                             variant="outlined"
                             onClick={(e) => {
                               e.stopPropagation()
@@ -2888,8 +2973,8 @@ function App() {
                           >
                             Edit
                           </Button>
-                          <Button 
-                            size="small" 
+                          <Button
+                            size="small"
                             color="error"
                             onClick={async (e) => {
                               e.stopPropagation()
@@ -2930,10 +3015,21 @@ function App() {
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setAdsDialogOpen(false)}>Close</Button>
+          {selectedAdIds.size > 0 && (
+            <Button
+              variant="contained"
+              startIcon={isExporting ? <CircularProgress size={16} color="inherit" /> : <DownloadIcon />}
+              disabled={isExporting}
+              onClick={exportSelectedAds}
+              sx={{ mr: 'auto' }}
+            >
+              Export {selectedAdIds.size} ad{selectedAdIds.size > 1 ? 's' : ''}
+            </Button>
+          )}
+          <Button onClick={() => { setAdsDialogOpen(false); setSelectedAdIds(new Set()) }}>Close</Button>
         </DialogActions>
       </Dialog>
-      
+
       {/* User Menu */}
       <Menu
         anchorEl={userMenuAnchor}
