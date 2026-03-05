@@ -21,7 +21,10 @@ const schema = a.schema({
     sectionIds: a.string().array(),
     subSectionIds: a.string().array(),
     appliedDiscounts: a.string(), // JSON snapshot: [{id, name, code, discountType, value, computedAmount}]
-  }).authorization(allow => [allow.owner()]),
+  }).authorization(allow => [
+    allow.owner(),
+    allow.group('Admin').to(['read', 'update']),
+  ]),
 
   User: a.model({
     email: a.string().required(),

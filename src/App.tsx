@@ -1182,21 +1182,25 @@ function App() {
 
   // Move block up
   const moveBlockUp = (id: string) => {
+    if (adApproved || adStatus === 'PENDING_APPROVAL') return
     const index = blocks.findIndex(b => b.id === id);
     if (index > 0) {
       const newBlocks = [...blocks];
       [newBlocks[index - 1], newBlocks[index]] = [newBlocks[index], newBlocks[index - 1]];
       setBlocks(newBlocks);
+      markAsEdited();
     }
   };
 
   // Move block down
   const moveBlockDown = (id: string) => {
+    if (adApproved || adStatus === 'PENDING_APPROVAL') return
     const index = blocks.findIndex(b => b.id === id);
     if (index < blocks.length - 1) {
       const newBlocks = [...blocks];
       [newBlocks[index], newBlocks[index + 1]] = [newBlocks[index + 1], newBlocks[index]];
       setBlocks(newBlocks);
+      markAsEdited();
     }
   };
 
@@ -3522,14 +3526,14 @@ function App() {
                         <Stack direction="row" spacing={0.5}>
                           <Tooltip title="Move block up. Moves this text block one position higher in the ad.">
                             <span>
-                              <IconButton size="small" onClick={() => moveBlockUp(selectedTextBlock.id)} disabled={adApproved}>
+                              <IconButton size="small" onClick={() => moveBlockUp(selectedTextBlock.id)} disabled={adApproved || adStatus === 'PENDING_APPROVAL'}>
                                 <ArrowUpwardIcon fontSize="small" />
                               </IconButton>
                             </span>
                           </Tooltip>
                           <Tooltip title="Move block down. Moves this text block one position lower in the ad.">
                             <span>
-                              <IconButton size="small" onClick={() => moveBlockDown(selectedTextBlock.id)} disabled={adApproved}>
+                              <IconButton size="small" onClick={() => moveBlockDown(selectedTextBlock.id)} disabled={adApproved || adStatus === 'PENDING_APPROVAL'}>
                                 <ArrowDownwardIcon fontSize="small" />
                               </IconButton>
                             </span>
@@ -3735,14 +3739,18 @@ function App() {
                         </Typography>
                         <Stack direction="row" spacing={0.5}>
                           <Tooltip title="Move up">
-                            <IconButton size="small" onClick={() => moveBlockUp(selectedImageBlock.id)}>
-                              <ArrowUpwardIcon fontSize="small" />
-                            </IconButton>
+                            <span>
+                              <IconButton size="small" onClick={() => moveBlockUp(selectedImageBlock.id)} disabled={adApproved || adStatus === 'PENDING_APPROVAL'}>
+                                <ArrowUpwardIcon fontSize="small" />
+                              </IconButton>
+                            </span>
                           </Tooltip>
                           <Tooltip title="Move down">
-                            <IconButton size="small" onClick={() => moveBlockDown(selectedImageBlock.id)}>
-                              <ArrowDownwardIcon fontSize="small" />
-                            </IconButton>
+                            <span>
+                              <IconButton size="small" onClick={() => moveBlockDown(selectedImageBlock.id)} disabled={adApproved || adStatus === 'PENDING_APPROVAL'}>
+                                <ArrowDownwardIcon fontSize="small" />
+                              </IconButton>
+                            </span>
                           </Tooltip>
                           <Tooltip title="Delete">
                             <IconButton size="small" color="error" onClick={() => deleteBlock(selectedImageBlock.id)}>
@@ -4322,7 +4330,8 @@ function App() {
                     sx={{
                       mt: 0, // No top margin
                       mb: 0, // No bottom margin
-                      display: 'block',
+                      display: 'flex',
+                      justifyContent: 'center',
                       width: '100%',
                     }}
                   >
@@ -4333,8 +4342,7 @@ function App() {
                       loading="eager"
                       style={{
                         display: 'block',
-                        width: 'auto',
-                        maxWidth: '100%',
+                        width: '100%',
                         height: 'auto',
                         margin: 0,
                         padding: 0,
