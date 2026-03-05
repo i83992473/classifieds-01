@@ -2019,48 +2019,32 @@ function App() {
   // Update height when content changes using ResizeObserver
   useEffect(() => {
     if (!adPreviewRef.current) return
-    
-    const updateHeight = () => {
+
+    const measureHeight = () => {
       if (adPreviewRef.current) {
-        // Use requestAnimationFrame to ensure DOM has updated
-        requestAnimationFrame(() => {
-          if (adPreviewRef.current) {
-            const height = adPreviewRef.current.scrollHeight
-            setAdHeightPx(Math.max(height, 200)) // Minimum 200px
-          }
-        })
+        const h = adPreviewRef.current.getBoundingClientRect().height
+        setAdHeightPx(Math.max(h, 200))
       }
     }
-    
-    // Initial measurement with slight delay
-    setTimeout(updateHeight, 100)
-    
-    // Use ResizeObserver for dynamic updates
-    const resizeObserver = new ResizeObserver(() => {
-      updateHeight()
+
+    // Initial measurement
+    measureHeight()
+
+    // Use ResizeObserver — read height directly from entry to avoid stale reads
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const h = entry.borderBoxSize?.[0]?.blockSize
+          ?? entry.contentRect.height
+        setAdHeightPx(Math.max(h, 200))
+      }
     })
-    
+
     resizeObserver.observe(adPreviewRef.current)
-    
-    // Also update on window resize
-    window.addEventListener('resize', updateHeight)
-    
+
     return () => {
       resizeObserver.disconnect()
-      window.removeEventListener('resize', updateHeight)
     }
-  }, [blocks, adWidthInches, borderStyle, adPadding])
-  
-  // Also update when block content changes (text edits, etc.)
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      if (adPreviewRef.current) {
-        const height = adPreviewRef.current.scrollHeight
-        setAdHeightPx(Math.max(height, 200))
-      }
-    }, 100)
-    return () => clearTimeout(timer)
-  }, [selectedTextBlock?.text, selectedBlockId])
+  }, [blocks, adWidthInches, borderStyle, adPadding, selectedTextBlock?.text])
   
   // Calculate ad statistics
   const calculateStats = () => {
