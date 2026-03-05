@@ -49,7 +49,8 @@ const schema = a.schema({
     paymentMethod: a.string(),
   }).authorization(allow => [
     allow.owner(),
-    allow.group('Admin').to(['read']),
+    allow.authenticated().to(['read']),
+    allow.group('Admin').to(['read', 'update']),
   ]),
 
   Product: a.model({
