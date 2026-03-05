@@ -41,7 +41,10 @@ const schema = a.schema({
     totalSpending: a.float().default(0),
     lastActive: a.datetime(),
     paymentMethod: a.string(),
-  }).authorization(allow => [allow.owner()]),
+  }).authorization(allow => [
+    allow.owner(),
+    allow.group('admin').to(['read']),
+  ]),
 
   Product: a.model({
     name: a.string().required(),
