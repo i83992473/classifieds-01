@@ -4306,6 +4306,7 @@ function App() {
                     onClick={(e) => {
                       e.stopPropagation()
                       setSelectedBlockId(block.id)
+                      setSidebarTab(1)
                     }}
                     className={`block-text ${selectedBlockId === block.id ? 'selected' : ''}`}
                     sx={{
@@ -4335,6 +4336,7 @@ function App() {
                     onClick={(e) => {
                       e.stopPropagation()
                       setSelectedBlockId(block.id)
+                      setSidebarTab(1)
                     }}
                     className={`block-image ${selectedBlockId === block.id ? 'selected' : ''}`}
                     sx={{
