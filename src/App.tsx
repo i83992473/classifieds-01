@@ -2036,9 +2036,45 @@ function App() {
       return sum + words.length
     }, 0)
     
+    // Calculate visual lines using canvas text measurement
+    const borderWidth = borderStyle === 'thick' ? 3 : borderStyle === 'dashed' ? 2 : borderStyle === 'thin' ? 1 : 0
+    const paddingPx = PADDING_MAP[adPadding] * 2
+    const contentWidthPx = (adWidthInches * 96) - paddingPx - (borderWidth * 2)
+    const canvas = document.createElement('canvas')
+    const ctx = canvas.getContext('2d')!
+
     const totalLines = textBlocks.reduce((sum, block) => {
-      const lines = block.text.split('\n').filter(line => line.trim().length > 0)
-      return sum + Math.max(lines.length, 1)
+      const fontSize = block.fontSize || TEXT_SIZE_MAP[block.size || 'medium']
+      const fontFamily = FONT_MAP[block.font || 'serif']
+      const weight = block.bold ? 'bold' : 'normal'
+      const style = block.italic ? 'italic' : 'normal'
+      ctx.font = `${style} ${weight} ${fontSize}px ${fontFamily}`
+
+      // Split by explicit newlines first, then measure word-wrap for each
+      const paragraphs = block.text.split('\n')
+      let blockLines = 0
+      for (const para of paragraphs) {
+        const trimmed = para.trim()
+        if (trimmed.length === 0) {
+          blockLines += 1 // empty line still counts
+          continue
+        }
+        const words = trimmed.split(/\s+/)
+        let currentLine = ''
+        let paraLines = 0
+        for (const word of words) {
+          const testLine = currentLine ? `${currentLine} ${word}` : word
+          if (ctx.measureText(testLine).width > contentWidthPx && currentLine) {
+            paraLines++
+            currentLine = word
+          } else {
+            currentLine = testLine
+          }
+        }
+        if (currentLine) paraLines++
+        blockLines += Math.max(paraLines, 1)
+      }
+      return sum + blockLines
     }, 0)
     
     const textSections = textBlocks.length
