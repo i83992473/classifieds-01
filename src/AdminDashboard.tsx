@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useAuthenticator } from '@aws-amplify/ui-react'
 import { generateClient } from 'aws-amplify/api'
 import { fetchAuthSession } from 'aws-amplify/auth'
@@ -913,7 +913,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
 
   // Load data based on active tab
   useEffect(() => {
-    if (activeTab === 0) loadAds(adIdSearch || initialAdFilter)
+    if (activeTab === 0) { loadAds(adIdSearch || initialAdFilter); loadUsers() }
     else if (activeTab === 1) loadUsers()
     else if (activeTab === 2) { loadProducts(); loadAllPlacements(); loadAllSections(); loadAllSubSections() }
     else if (activeTab === 3) loadPricingSettings()
@@ -1025,6 +1025,17 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
     }
   }
   
+  // Lookup map: owner (Cognito sub) → email
+  const ownerEmailMap = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const u of users) {
+      map.set(u.id, u.email)
+    }
+    return map
+  }, [users])
+
+  const getOwnerEmail = (ownerId: string) => ownerEmailMap.get(ownerId) || ownerId
+
   // Filter users based on search criteria
   const getFilteredUsers = () => {
     return users.filter(user => {
@@ -2044,7 +2055,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
       
       // Create CSV with ad information
       const csvRows: string[] = []
-      csvRows.push('ID,Title,Owner,Status,Product,Price,Width (inches),Created Date,Last Updated,Approved Date,Approved By,PDF Key')
+      csvRows.push('ID,Title,Owner Email,Owner ID,Status,Product,Price,Width (inches),Created Date,Last Updated,Approved Date,Approved By,PDF Key')
 
       // Download PDFs and add to zip
       const pdfPromises = exportableAds.map(async (ad) => {
@@ -2052,6 +2063,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
         const csvRow = [
           `"${(ad.id || '').replace(/"/g, '""')}"`,
           `"${(ad.title || '').replace(/"/g, '""')}"`,
+          `"${getOwnerEmail(ad.owner).replace(/"/g, '""')}"`,
           `"${(ad.owner || '').replace(/"/g, '""')}"`,
           `"${(ad.status || '').replace(/"/g, '""')}"`,
           `"${(ad.productName || '').replace(/"/g, '""')}"`,
@@ -3361,7 +3373,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                               <MenuItem onClick={() => handleStatusChange(ad, 'ARCHIVED')}>Archived</MenuItem>
                             </Menu>
                           </TableCell>
-                          <TableCell>{ad.owner}</TableCell>
+                          <TableCell>{getOwnerEmail(ad.owner)}</TableCell>
                           <TableCell>{ad.productName || '-'}</TableCell>
                           <TableCell>
                             {ad.totalPrice != null ? `$${ad.totalPrice.toFixed(2)}` : '-'}
