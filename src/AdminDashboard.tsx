@@ -53,6 +53,7 @@ import EditIcon from '@mui/icons-material/Edit'
 import DeleteIcon from '@mui/icons-material/Delete'
 import BlockIcon from '@mui/icons-material/Block'
 import ArchiveIcon from '@mui/icons-material/Archive'
+import UnarchiveIcon from '@mui/icons-material/Unarchive'
 import MessageIcon from '@mui/icons-material/Message'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import LogoutIcon from '@mui/icons-material/Logout'
@@ -1736,6 +1737,27 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
     }
   }
 
+  // Allowed actions per ad status
+  const AD_ACTIONS_BY_STATUS: Record<string, Set<string>> = {
+    'DRAFT':              new Set(['archive', 'delete', 'message', 'changeStatus']),
+    'PENDING_APPROVAL':   new Set(['approve', 'reject', 'message', 'changeStatus']),
+    'APPROVED':           new Set(['publish', 'archive', 'export', 'message', 'changeStatus']),
+    'NOT_APPROVED':       new Set(['archive', 'delete', 'message', 'changeStatus']),
+    'PUBLISHED':          new Set(['unpublish', 'archive', 'message', 'changeStatus']),
+    'ARCHIVED':           new Set(['unarchive', 'message', 'changeStatus']),
+  }
+
+  const isActionAllowedForAd = (ad: Ad, action: string) => {
+    return AD_ACTIONS_BY_STATUS[ad.status]?.has(action) ?? false
+  }
+
+  // For bulk: action is allowed only if ALL selected ads permit it
+  const selectedAdObjects = selectedAds.map(adId => ads.find(a => a.id === adId)).filter((ad): ad is Ad => ad !== undefined)
+  const isBulkActionAllowed = (action: string) => {
+    if (selectedAdObjects.length === 0) return false
+    return selectedAdObjects.every(ad => isActionAllowedForAd(ad, action))
+  }
+
   const handleStatusMenuOpen = (event: React.MouseEvent<HTMLElement>, adId: string) => {
     setStatusMenuAnchor({ element: event.currentTarget, adId })
   }
@@ -1919,6 +1941,52 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
     }
   }
   
+  const handleUnarchiveAd = async (ad: Ad) => {
+    try {
+      await client.graphql({
+        query: updateAdMutation,
+        variables: {
+          input: {
+            id: ad.id,
+            status: 'DRAFT',
+            approved: false
+          }
+        },
+        authMode: 'userPool'
+      })
+      setSnackbar({ open: true, message: 'Ad unarchived', severity: 'success' })
+      loadAds()
+    } catch (error) {
+      console.error('Error unarchiving ad:', error)
+      setSnackbar({ open: true, message: 'Failed to unarchive ad', severity: 'error' })
+    }
+  }
+
+  const handleBulkUnarchiveAds = async () => {
+    try {
+      const adsToUnarchive = selectedAdObjects.filter(ad => ad.status === 'ARCHIVED')
+      await Promise.all(adsToUnarchive.map(ad => {
+        return client.graphql({
+          query: updateAdMutation,
+          variables: {
+            input: {
+              id: ad.id,
+              status: 'DRAFT',
+              approved: false
+            }
+          },
+          authMode: 'userPool'
+        })
+      }))
+      setSnackbar({ open: true, message: `${adsToUnarchive.length} ads unarchived`, severity: 'success' })
+      setSelectedAds([])
+      loadAds()
+    } catch (error) {
+      console.error('Error bulk unarchiving ads:', error)
+      setSnackbar({ open: true, message: 'Failed to unarchive ads', severity: 'error' })
+    }
+  }
+
   const handleBulkDeleteAds = async () => {
     if (!confirm(`Delete ${selectedAds.length} ads?`)) return
     try {
@@ -3130,36 +3198,49 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                           <MenuItem value="ARCHIVED">Archived</MenuItem>
                         </Select>
                       </FormControl>
-                      <Tooltip title={`Approve ${selectedAds.length} selected ad(s). Marks ads as approved and ready for publication.`}>
-                        <Button size="small" variant="outlined" color="success" startIcon={<CheckIcon />} onClick={handleBulkApproveAds}>
-                          Approve ({selectedAds.length})
-                        </Button>
-                      </Tooltip>
-                      <Tooltip title={`Reject ${selectedAds.length} selected ad(s). Marks ads as not approved.`}>
-                        <Button size="small" variant="outlined" color="error" startIcon={<CloseIcon />} onClick={handleBulkRejectAds}>
-                          Reject ({selectedAds.length})
-                        </Button>
-                      </Tooltip>
-                      {adStatusFilter === 'APPROVED' && (
-                        <Tooltip title={`Publish ${selectedAds.length} selected approved ad(s). Published ads cannot be edited.`}>
+                      {isBulkActionAllowed('approve') && (
+                        <Tooltip title={`Approve ${selectedAds.length} selected ad(s). Marks ads as approved and ready for publication.`}>
+                          <Button size="small" variant="outlined" color="success" startIcon={<CheckIcon />} onClick={handleBulkApproveAds}>
+                            Approve ({selectedAds.length})
+                          </Button>
+                        </Tooltip>
+                      )}
+                      {isBulkActionAllowed('reject') && (
+                        <Tooltip title={`Reject ${selectedAds.length} selected ad(s). Marks ads as not approved.`}>
+                          <Button size="small" variant="outlined" color="error" startIcon={<CloseIcon />} onClick={handleBulkRejectAds}>
+                            Reject ({selectedAds.length})
+                          </Button>
+                        </Tooltip>
+                      )}
+                      {isBulkActionAllowed('publish') && (
+                        <Tooltip title={`Publish ${selectedAds.length} selected ad(s). Published ads cannot be edited.`}>
                           <Button size="small" variant="outlined" color="success" startIcon={<CheckIcon />} onClick={handleBulkPublishAds}>
                             Publish ({selectedAds.length})
                           </Button>
                         </Tooltip>
                       )}
-                      {adStatusFilter === 'PUBLISHED' && (
-                        <Tooltip title={`Unpublish ${selectedAds.length} selected published ad(s). Returns ads to approved status.`}>
+                      {isBulkActionAllowed('unpublish') && (
+                        <Tooltip title={`Unpublish ${selectedAds.length} selected ad(s). Returns ads to approved status.`}>
                           <Button size="small" variant="outlined" color="warning" startIcon={<CloseIcon />} onClick={handleBulkUnpublishAds}>
                             Unpublish ({selectedAds.length})
                           </Button>
                         </Tooltip>
                       )}
-                      <Tooltip title={`Archive ${selectedAds.length} selected ad(s). Moves ads to archived status for record keeping.`}>
-                        <Button size="small" variant="outlined" startIcon={<ArchiveIcon />} onClick={handleBulkArchiveAds}>
-                          Archive ({selectedAds.length})
-                        </Button>
-                      </Tooltip>
-                      {adStatusFilter !== 'PUBLISHED' && (
+                      {isBulkActionAllowed('archive') && (
+                        <Tooltip title={`Archive ${selectedAds.length} selected ad(s). Moves ads to archived status for record keeping.`}>
+                          <Button size="small" variant="outlined" startIcon={<ArchiveIcon />} onClick={handleBulkArchiveAds}>
+                            Archive ({selectedAds.length})
+                          </Button>
+                        </Tooltip>
+                      )}
+                      {isBulkActionAllowed('unarchive') && (
+                        <Tooltip title={`Unarchive ${selectedAds.length} selected ad(s). Returns ads to draft status.`}>
+                          <Button size="small" variant="outlined" startIcon={<UnarchiveIcon />} onClick={handleBulkUnarchiveAds}>
+                            Unarchive ({selectedAds.length})
+                          </Button>
+                        </Tooltip>
+                      )}
+                      {isBulkActionAllowed('delete') && (
                         <Tooltip title={`Delete ${selectedAds.length} selected ad(s). Permanently removes ads from the system.`}>
                           <Button size="small" variant="outlined" color="error" startIcon={<DeleteIcon />} onClick={handleBulkDeleteAds}>
                             Delete ({selectedAds.length})
@@ -3171,14 +3252,14 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                           Message Owner ({selectedAds.length})
                         </Button>
                       </Tooltip>
-                      {adStatusFilter === 'APPROVED' && (
+                      {isBulkActionAllowed('export') && (
                         <Tooltip title={`Export ${selectedAds.length} selected approved ad(s) as a zip file containing CSV and PDFs.`}>
                           <span>
-                            <Button 
-                              size="small" 
-                              variant="contained" 
-                              color="primary" 
-                              startIcon={isLoading ? <CircularProgress size={16} color="inherit" /> : <PictureAsPdfIcon />} 
+                            <Button
+                              size="small"
+                              variant="contained"
+                              color="primary"
+                              startIcon={isLoading ? <CircularProgress size={16} color="inherit" /> : <PictureAsPdfIcon />}
                               onClick={handleExportSelectedAds}
                               disabled={isLoading}
                             >
@@ -3284,49 +3365,49 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                                   </IconButton>
                                 </span>
                               </Tooltip>
-                              {adStatusFilter === 'APPROVED' && (
+                              {isActionAllowedForAd(ad, 'approve') && (
+                                <Tooltip title="Approve ad. Marks this ad as approved and ready for publication.">
+                                  <IconButton size="small" color="success" onClick={() => handleApproveAd(ad)}>
+                                    <CheckIcon />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                              {isActionAllowedForAd(ad, 'reject') && (
+                                <Tooltip title="Reject ad. Marks this ad as not approved.">
+                                  <IconButton size="small" color="error" onClick={() => handleRejectAd(ad)}>
+                                    <CloseIcon />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                              {isActionAllowedForAd(ad, 'publish') && (
                                 <Tooltip title="Publish ad. Published ads cannot be edited.">
                                   <IconButton size="small" color="success" onClick={() => handlePublishAd(ad)}>
                                     <CheckIcon />
                                   </IconButton>
                                 </Tooltip>
                               )}
-                              {adStatusFilter === 'PUBLISHED' && (
-                                <>
-                                  <Tooltip title="Unpublish ad. Returns ad to approved status.">
-                                    <IconButton size="small" color="warning" onClick={() => handleUnpublishAd(ad)}>
-                                      <CloseIcon />
-                                    </IconButton>
-                                  </Tooltip>
-                                  <Tooltip title="Archive ad. Moves this ad to archived status for record keeping.">
-                                    <IconButton size="small" onClick={() => handleArchiveAd(ad)}>
-                                      <ArchiveIcon />
-                                    </IconButton>
-                                  </Tooltip>
-                                </>
+                              {isActionAllowedForAd(ad, 'unpublish') && (
+                                <Tooltip title="Unpublish ad. Returns ad to approved status.">
+                                  <IconButton size="small" color="warning" onClick={() => handleUnpublishAd(ad)}>
+                                    <CloseIcon />
+                                  </IconButton>
+                                </Tooltip>
                               )}
-                              {adStatusFilter === 'PENDING_APPROVAL' && (
-                                <>
-                                  <Tooltip title="Approve ad. Marks this ad as approved and ready for publication.">
-                                    <IconButton size="small" color="success" onClick={() => handleApproveAd(ad)}>
-                                      <CheckIcon />
-                                    </IconButton>
-                                  </Tooltip>
-                                  <Tooltip title="Reject ad. Marks this ad as not approved.">
-                                    <IconButton size="small" color="error" onClick={() => handleRejectAd(ad)}>
-                                      <CloseIcon />
-                                    </IconButton>
-                                  </Tooltip>
-                                </>
-                              )}
-                              {adStatusFilter !== 'PUBLISHED' && adStatusFilter !== 'PENDING_APPROVAL' && adStatusFilter !== 'APPROVED' && (
+                              {isActionAllowedForAd(ad, 'archive') && (
                                 <Tooltip title="Archive ad. Moves this ad to archived status for record keeping.">
                                   <IconButton size="small" onClick={() => handleArchiveAd(ad)}>
                                     <ArchiveIcon />
                                   </IconButton>
                                 </Tooltip>
                               )}
-                              {adStatusFilter !== 'PUBLISHED' && (
+                              {isActionAllowedForAd(ad, 'unarchive') && (
+                                <Tooltip title="Unarchive ad. Returns ad to draft status.">
+                                  <IconButton size="small" onClick={() => handleUnarchiveAd(ad)}>
+                                    <UnarchiveIcon />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                              {isActionAllowedForAd(ad, 'delete') && (
                                 <Tooltip title="Delete ad. Permanently removes this ad from the system.">
                                   <IconButton size="small" color="error" onClick={() => handleDeleteAd(ad)}>
                                     <DeleteIcon />
