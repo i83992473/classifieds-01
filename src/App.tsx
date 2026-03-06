@@ -551,12 +551,18 @@ function App() {
     console.log('Final admin status:', finalAdminStatus)
     setIsAdmin(finalAdminStatus)
     
-    // Load ads list for later use (filter to current user's ads only)
+    // Load ads list for later use
+    // For admins, filter by owner since Admin group can read all ads.
+    // For non-admins, allow.owner() auto-filters to their own ads.
     try {
+      const variables: { filter?: { owner: { eq: string } }; limit: number } = { limit: 1000 }
+      if (finalAdminStatus) {
+        variables.filter = { owner: { eq: userId } }
+      }
       const result = await client.graphql({
         query: listAds,
         authMode: 'userPool',
-        variables: { filter: { owner: { eq: userId } } }
+        variables
       }) as { data: { listAds: { items: Ad[] } } }
       const ads = result.data.listAds.items || []
       setSavedAds(ads)
@@ -1028,10 +1034,14 @@ function App() {
   const loadAdsList = async () => {
     if (!user) return
     try {
+      const variables: { filter?: { owner: { eq: string } }; limit: number } = { limit: 1000 }
+      if (isAdmin) {
+        variables.filter = { owner: { eq: user.userId } }
+      }
       const result = await client.graphql({
         query: listAds,
         authMode: 'userPool',
-        variables: { filter: { owner: { eq: user.userId } } }
+        variables
       }) as { data: { listAds: { items: Ad[] } } }
       setSavedAds(result.data.listAds.items || [])
     } catch (error: unknown) {
