@@ -365,6 +365,8 @@ function App() {
   })
   const [adApproved, setAdApproved] = useState(false)
   const [adStatus, setAdStatus] = useState<'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'NOT_APPROVED' | 'ARCHIVED' | 'PUBLISHED'>('DRAFT')
+  // True when the ad cannot be edited or deleted by the user
+  const isAdLocked = adStatus === 'APPROVED' || adStatus === 'PENDING_APPROVAL' || adStatus === 'PUBLISHED' || adStatus === 'ARCHIVED'
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   
   // Date fields
@@ -549,11 +551,12 @@ function App() {
     console.log('Final admin status:', finalAdminStatus)
     setIsAdmin(finalAdminStatus)
     
-    // Load ads list for later use
+    // Load ads list for later use (filter to current user's ads only)
     try {
       const result = await client.graphql({
         query: listAds,
-        authMode: 'userPool'
+        authMode: 'userPool',
+        variables: { filter: { owner: { eq: userId } } }
       }) as { data: { listAds: { items: Ad[] } } }
       const ads = result.data.listAds.items || []
       setSavedAds(ads)
@@ -1027,7 +1030,8 @@ function App() {
     try {
       const result = await client.graphql({
         query: listAds,
-        authMode: 'userPool'
+        authMode: 'userPool',
+        variables: { filter: { owner: { eq: user.userId } } }
       }) as { data: { listAds: { items: Ad[] } } }
       setSavedAds(result.data.listAds.items || [])
     } catch (error: unknown) {
@@ -1063,12 +1067,11 @@ function App() {
 
   // Helper to mark ad as edited (change NOT_APPROVED to DRAFT and set unsaved changes)
   const markAsEdited = () => {
+    if (isAdLocked) return
     if (adStatus === 'NOT_APPROVED') {
       setAdStatus('DRAFT')
     }
-    if (adStatus !== 'PENDING_APPROVAL' && !adApproved) {
-      setHasUnsavedChanges(true)
-    }
+    setHasUnsavedChanges(true)
   }
 
   // Add a new text block
@@ -1131,16 +1134,8 @@ function App() {
 
   // Trigger file input click
   const addImageBlock = () => {
-    if (adApproved || adStatus === 'PENDING_APPROVAL' || adStatus === 'PUBLISHED') {
-      let message = 'Cannot edit ad.'
-      if (adStatus === 'PENDING_APPROVAL') {
-        message = 'Cannot edit ad pending approval. Cancel submission to edit.'
-      } else if (adStatus === 'PUBLISHED') {
-        message = 'Cannot edit published ad. Unpublish to edit.'
-      } else {
-        message = 'Cannot edit approved ad. Click Edit to remove approval first.'
-      }
-      setSnackbar({ open: true, message, severity: 'error' })
+    if (isAdLocked) {
+      setSnackbar({ open: true, message: 'Cannot edit this ad in its current status.', severity: 'error' })
       return
     }
     fileInputRef.current?.click();
@@ -1148,8 +1143,8 @@ function App() {
 
   // Update a text block's properties
   const updateTextBlock = (id: string, updates: Partial<TextBlock>) => {
-    if (adApproved || adStatus === 'PENDING_APPROVAL') {
-      setSnackbar({ open: true, message: adStatus === 'PENDING_APPROVAL' ? 'Cannot edit ad pending approval. Cancel submission to edit.' : 'Cannot edit approved ad. Click Edit to remove approval first.', severity: 'error' })
+    if (isAdLocked) {
+      setSnackbar({ open: true, message: 'Cannot edit this ad in its current status.', severity: 'error' })
       return
     }
     setBlocks(blocks.map(block =>
@@ -1162,8 +1157,8 @@ function App() {
 
   // Delete a block
   const deleteBlock = async (id: string) => {
-    if (adApproved || adStatus === 'PENDING_APPROVAL') {
-      setSnackbar({ open: true, message: adStatus === 'PENDING_APPROVAL' ? 'Cannot edit ad pending approval. Cancel submission to edit.' : 'Cannot edit approved ad. Click Edit to remove approval first.', severity: 'error' })
+    if (isAdLocked) {
+      setSnackbar({ open: true, message: 'Cannot edit this ad in its current status.', severity: 'error' })
       return
     }
     const block = blocks.find(b => b.id === id)
@@ -1186,7 +1181,7 @@ function App() {
 
   // Move block up
   const moveBlockUp = (id: string) => {
-    if (adApproved || adStatus === 'PENDING_APPROVAL') return
+    if (isAdLocked) return
     const index = blocks.findIndex(b => b.id === id);
     if (index > 0) {
       const newBlocks = [...blocks];
@@ -1198,7 +1193,7 @@ function App() {
 
   // Move block down
   const moveBlockDown = (id: string) => {
-    if (adApproved || adStatus === 'PENDING_APPROVAL') return
+    if (isAdLocked) return
     const index = blocks.findIndex(b => b.id === id);
     if (index < blocks.length - 1) {
       const newBlocks = [...blocks];
@@ -1266,19 +1261,9 @@ function App() {
       }
       
       if (currentAdId) {
-        // Update existing ad - cannot edit if: PENDING_APPROVAL, PUBLISHED, ARCHIVED, or APPROVED
-        if (adStatus === 'PENDING_APPROVAL' || adStatus === 'PUBLISHED' || adStatus === 'ARCHIVED' || adStatus === 'APPROVED') {
-          let message = 'Cannot edit ad.'
-          if (adStatus === 'PENDING_APPROVAL') {
-            message = 'Cannot edit ad pending approval. Cancel submission to edit.'
-          } else if (adStatus === 'PUBLISHED') {
-            message = 'Cannot edit published ad.'
-          } else if (adStatus === 'ARCHIVED') {
-            message = 'Cannot edit archived ad.'
-          } else if (adStatus === 'APPROVED') {
-            message = 'Cannot edit approved ad.'
-          }
-          setSnackbar({ open: true, message, severity: 'error' })
+        // Update existing ad - cannot edit if locked
+        if (isAdLocked) {
+          setSnackbar({ open: true, message: 'Cannot edit this ad in its current status.', severity: 'error' })
           setIsSaving(false)
           return
         }
@@ -1959,6 +1944,10 @@ function App() {
   // @ts-expect-error - Function is kept for future use
   const deleteCurrentAd = async () => {
     if (!currentAdId) return
+    if (isAdLocked) {
+      setSnackbar({ open: true, message: 'Cannot delete this ad in its current status.', severity: 'error' })
+      return
+    }
     
     setIsSaving(true)
     try {
@@ -2484,6 +2473,7 @@ function App() {
                             <Button
                               size="small"
                               color="error"
+                              disabled={status === 'APPROVED' || status === 'PENDING_APPROVAL' || status === 'PUBLISHED' || status === 'ARCHIVED'}
                               onClick={async (e) => {
                                 e.stopPropagation()
                                 if (confirm(`Delete "${ad.title}"?`)) {
@@ -2976,6 +2966,7 @@ function App() {
                           <Button
                             size="small"
                             color="error"
+                            disabled={status === 'APPROVED' || status === 'PENDING_APPROVAL' || status === 'PUBLISHED' || status === 'ARCHIVED'}
                             onClick={async (e) => {
                               e.stopPropagation()
                               if (confirm(`Delete "${ad.title}"?`)) {
@@ -3213,6 +3204,7 @@ function App() {
                         labelId="product-select-label"
                         value={selectedProduct || (products.length > 0 ? products[0].id : '')}
                         label="Select Product"
+                        disabled={isAdLocked}
                         onChange={(e) => {
                           setSelectedProduct(e.target.value)
                           // Update ad width when product changes
@@ -3264,6 +3256,7 @@ function App() {
                             control={
                               <Checkbox
                                 size="small"
+                                disabled={isAdLocked}
                                 checked={selectedSections.includes(section.id)}
                                 onChange={(e) => {
                                   const newSelected = e.target.checked
@@ -3314,6 +3307,7 @@ function App() {
                             control={
                               <Checkbox
                                 size="small"
+                                disabled={isAdLocked}
                                 checked={selectedSubSections.includes(ss.id)}
                                 onChange={(e) => {
                                   setSelectedSubSections(prev =>
@@ -3353,6 +3347,7 @@ function App() {
                             control={
                               <Checkbox
                                 size="small"
+                                disabled={isAdLocked}
                                 checked={selectedPlacements.includes(placement.id)}
                                 onChange={(e) => {
                                   setSelectedPlacements(prev =>
@@ -3395,7 +3390,7 @@ function App() {
                         setAdTitle(e.target.value)
                         markAsEdited()
                       }}
-                      disabled={adApproved || adStatus === 'PENDING_APPROVAL' || adStatus === 'PUBLISHED'}
+                      disabled={isAdLocked}
                     />
                   </Box>
 
@@ -3407,6 +3402,7 @@ function App() {
                       fullWidth
                       label="Start Date"
                       value={startDate}
+                      disabled={isAdLocked}
                       onChange={(e) => {
                         const newStartDate = e.target.value
                         setStartDate(newStartDate)
@@ -3446,7 +3442,7 @@ function App() {
                         setEndDate(e.target.value)
                         markAsEdited()
                       }}
-                      disabled={adApproved || adStatus === 'PENDING_APPROVAL' || adStatus === 'PUBLISHED'}
+                      disabled={isAdLocked}
                       InputLabelProps={{
                         shrink: true,
                       }}
@@ -3492,7 +3488,7 @@ function App() {
                       }}
                       size="small"
                       fullWidth
-                      disabled={adApproved || adStatus === 'PENDING_APPROVAL' || adStatus === 'PUBLISHED'}
+                      disabled={isAdLocked}
                     >
                       <ToggleButton value="none">None</ToggleButton>
                       <ToggleButton value="thin">Thin</ToggleButton>
@@ -3531,7 +3527,7 @@ function App() {
                       }}
                       size="small"
                       fullWidth
-                      disabled={adApproved || adStatus === 'PENDING_APPROVAL' || adStatus === 'PUBLISHED'}
+                      disabled={isAdLocked}
                     >
                       <ToggleButton value="flat">Flat</ToggleButton>
                       <ToggleButton value="rounded">Rounded</ToggleButton>
@@ -3568,7 +3564,7 @@ function App() {
                       }}
                       size="small"
                       fullWidth
-                      disabled={adApproved || adStatus === 'PENDING_APPROVAL' || adStatus === 'PUBLISHED'}
+                      disabled={isAdLocked}
                     >
                       <ToggleButton value="none">None</ToggleButton>
                       <ToggleButton value="medium">Medium</ToggleButton>
@@ -3588,10 +3584,10 @@ function App() {
               {sidebarTab === 1 && (
                 <>
                   <Stack direction="row" spacing={1} mb={2}>
-                    <Button variant="contained" size="small" startIcon={<CircularPlusIcon color="primary" />} onClick={addTextBlock} disabled={adApproved || adStatus === 'PENDING_APPROVAL' || isSaving || products.length === 0} sx={{ flex: 1 }}>
+                    <Button variant="contained" size="small" startIcon={<CircularPlusIcon color="primary" />} onClick={addTextBlock} disabled={isAdLocked || isSaving || products.length === 0} sx={{ flex: 1 }}>
                       Text
                     </Button>
-                    <Button variant="outlined" size="small" startIcon={<CircularPlusIcon color="primary" />} onClick={addImageBlock} disabled={adApproved || adStatus === 'PENDING_APPROVAL' || isSaving || products.length === 0} sx={{ flex: 1 }}>
+                    <Button variant="outlined" size="small" startIcon={<CircularPlusIcon color="primary" />} onClick={addImageBlock} disabled={isAdLocked || isSaving || products.length === 0} sx={{ flex: 1 }}>
                       Image
                     </Button>
                   </Stack>
@@ -3615,21 +3611,21 @@ function App() {
                         <Stack direction="row" spacing={0.5}>
                           <Tooltip title="Move block up. Moves this text block one position higher in the ad.">
                             <span>
-                              <IconButton size="small" onClick={() => moveBlockUp(selectedTextBlock.id)} disabled={adApproved || adStatus === 'PENDING_APPROVAL'}>
+                              <IconButton size="small" onClick={() => moveBlockUp(selectedTextBlock.id)} disabled={isAdLocked}>
                                 <ArrowUpwardIcon fontSize="small" />
                               </IconButton>
                             </span>
                           </Tooltip>
                           <Tooltip title="Move block down. Moves this text block one position lower in the ad.">
                             <span>
-                              <IconButton size="small" onClick={() => moveBlockDown(selectedTextBlock.id)} disabled={adApproved || adStatus === 'PENDING_APPROVAL'}>
+                              <IconButton size="small" onClick={() => moveBlockDown(selectedTextBlock.id)} disabled={isAdLocked}>
                                 <ArrowDownwardIcon fontSize="small" />
                               </IconButton>
                             </span>
                           </Tooltip>
                           <Tooltip title="Delete block. Permanently removes this text block from the ad.">
                             <span>
-                              <IconButton size="small" color="error" onClick={() => deleteBlock(selectedTextBlock.id)} disabled={adApproved}>
+                              <IconButton size="small" color="error" onClick={() => deleteBlock(selectedTextBlock.id)} disabled={isAdLocked}>
                                 <DeleteIcon fontSize="small" />
                               </IconButton>
                             </span>
@@ -3641,6 +3637,7 @@ function App() {
                         minRows={3}
                         maxRows={6}
                         fullWidth
+                        disabled={isAdLocked}
                         value={selectedTextBlock.text}
                         onChange={e => updateTextBlock(selectedTextBlock.id, { text: e.target.value })}
                         inputRef={textBlockInputRef}
@@ -3662,7 +3659,7 @@ function App() {
                               size="small"
                               color={selectedTextBlock.bold ? 'primary' : 'default'}
                               onClick={() => updateTextBlock(selectedTextBlock.id, { bold: !selectedTextBlock.bold })}
-                              disabled={adApproved || adStatus === 'PENDING_APPROVAL' || adStatus === 'PUBLISHED'}
+                              disabled={isAdLocked}
                             >
                               <FormatBoldIcon fontSize="small" />
                             </IconButton>
@@ -3674,7 +3671,7 @@ function App() {
                               size="small"
                               color={selectedTextBlock.italic ? 'primary' : 'default'}
                               onClick={() => updateTextBlock(selectedTextBlock.id, { italic: !selectedTextBlock.italic })}
-                              disabled={adApproved || adStatus === 'PENDING_APPROVAL' || adStatus === 'PUBLISHED'}
+                              disabled={isAdLocked}
                             >
                               <FormatItalicIcon fontSize="small" />
                             </IconButton>
@@ -3686,7 +3683,7 @@ function App() {
                               size="small"
                               color={selectedTextBlock.underline ? 'primary' : 'default'}
                               onClick={() => updateTextBlock(selectedTextBlock.id, { underline: !selectedTextBlock.underline })}
-                              disabled={adApproved || adStatus === 'PENDING_APPROVAL' || adStatus === 'PUBLISHED'}
+                              disabled={isAdLocked}
                             >
                               <FormatUnderlinedIcon fontSize="small" />
                             </IconButton>
@@ -3829,22 +3826,24 @@ function App() {
                         <Stack direction="row" spacing={0.5}>
                           <Tooltip title="Move up">
                             <span>
-                              <IconButton size="small" onClick={() => moveBlockUp(selectedImageBlock.id)} disabled={adApproved || adStatus === 'PENDING_APPROVAL'}>
+                              <IconButton size="small" onClick={() => moveBlockUp(selectedImageBlock.id)} disabled={isAdLocked}>
                                 <ArrowUpwardIcon fontSize="small" />
                               </IconButton>
                             </span>
                           </Tooltip>
                           <Tooltip title="Move down">
                             <span>
-                              <IconButton size="small" onClick={() => moveBlockDown(selectedImageBlock.id)} disabled={adApproved || adStatus === 'PENDING_APPROVAL'}>
+                              <IconButton size="small" onClick={() => moveBlockDown(selectedImageBlock.id)} disabled={isAdLocked}>
                                 <ArrowDownwardIcon fontSize="small" />
                               </IconButton>
                             </span>
                           </Tooltip>
                           <Tooltip title="Delete">
-                            <IconButton size="small" color="error" onClick={() => deleteBlock(selectedImageBlock.id)}>
-                              <DeleteIcon fontSize="small" />
-                            </IconButton>
+                            <span>
+                              <IconButton size="small" color="error" onClick={() => deleteBlock(selectedImageBlock.id)} disabled={isAdLocked}>
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </span>
                           </Tooltip>
                         </Stack>
                       </Stack>
@@ -3860,7 +3859,7 @@ function App() {
                         fullWidth 
                         startIcon={<CircularPlusIcon color="primary" />}
                         onClick={addImageBlock}
-                        disabled={isSaving}
+                        disabled={isAdLocked || isSaving}
                       >
                         Replace Image
                       </Button>
