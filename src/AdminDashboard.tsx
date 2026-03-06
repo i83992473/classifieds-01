@@ -523,6 +523,7 @@ interface Ad {
   widthInches?: number
   pdfKey?: string
   createdAt?: string
+  updatedAt?: string
 }
 
 interface User {
@@ -1743,7 +1744,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
     'PENDING_APPROVAL':   new Set(['approve', 'reject', 'message', 'changeStatus']),
     'APPROVED':           new Set(['publish', 'archive', 'export', 'message', 'changeStatus']),
     'NOT_APPROVED':       new Set(['archive', 'delete', 'message', 'changeStatus']),
-    'PUBLISHED':          new Set(['unpublish', 'archive', 'message', 'changeStatus']),
+    'PUBLISHED':          new Set(['unpublish', 'archive', 'export', 'message', 'changeStatus']),
     'ARCHIVED':           new Set(['unarchive', 'message', 'changeStatus']),
   }
 
@@ -2027,13 +2028,13 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
       return
     }
 
-    // Filter to only approved ads
-    const approvedAds = selectedAds
+    // Filter to only approved or published ads
+    const exportableAds = selectedAds
       .map(adId => ads.find(a => a.id === adId))
-      .filter((ad): ad is Ad => ad !== undefined && ad.approved === true)
+      .filter((ad): ad is Ad => ad !== undefined && (ad.status === 'APPROVED' || ad.status === 'PUBLISHED'))
 
-    if (approvedAds.length === 0) {
-      setSnackbar({ open: true, message: 'No approved ads selected. Please select approved ads to export.', severity: 'error' })
+    if (exportableAds.length === 0) {
+      setSnackbar({ open: true, message: 'No approved or published ads selected. Only approved and published ads can be exported.', severity: 'error' })
       return
     }
 
@@ -2043,18 +2044,21 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
       
       // Create CSV with ad information
       const csvRows: string[] = []
-      csvRows.push('Title,Owner,Product,Price,Width (inches),Created Date,Approved Date,Approved By,PDF Key')
-      
+      csvRows.push('ID,Title,Owner,Status,Product,Price,Width (inches),Created Date,Last Updated,Approved Date,Approved By,PDF Key')
+
       // Download PDFs and add to zip
-      const pdfPromises = approvedAds.map(async (ad) => {
+      const pdfPromises = exportableAds.map(async (ad) => {
         // Add to CSV
         const csvRow = [
+          `"${(ad.id || '').replace(/"/g, '""')}"`,
           `"${(ad.title || '').replace(/"/g, '""')}"`,
           `"${(ad.owner || '').replace(/"/g, '""')}"`,
+          `"${(ad.status || '').replace(/"/g, '""')}"`,
           `"${(ad.productName || '').replace(/"/g, '""')}"`,
           ad.totalPrice?.toFixed(2) || '0.00',
           ad.widthInches?.toString() || '',
           ad.createdAt ? new Date(ad.createdAt).toLocaleDateString() : '',
+          ad.updatedAt ? new Date(ad.updatedAt).toLocaleDateString() : '',
           ad.approvedAt ? new Date(ad.approvedAt).toLocaleDateString() : '',
           `"${(ad.approvedBy || '').replace(/"/g, '""')}"`,
           `"${(ad.pdfKey || '').replace(/"/g, '""')}"`
@@ -2092,33 +2096,40 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
       const url = URL.createObjectURL(zipBlob)
       const link = document.createElement('a')
       link.href = url
-      link.download = `approved-ads-export-${new Date().toISOString().split('T')[0]}.zip`
+      link.download = `ads-export-${new Date().toISOString().split('T')[0]}.zip`
       document.body.appendChild(link)
       link.click()
       document.body.removeChild(link)
       URL.revokeObjectURL(url)
-      
-      // Set exported ads to published status
-      try {
-        await Promise.all(approvedAds.map(ad => {
-          return client.graphql({
-            query: updateAdMutation,
-            variables: {
-              input: {
-                id: ad.id,
-                status: 'PUBLISHED',
-                approved: true
-              }
-            },
-            authMode: 'userPool'
-          })
-        }))
-      } catch (error) {
-        console.error('Error publishing exported ads:', error)
-        // Continue even if publishing fails - export was successful
+
+      // Set exported APPROVED ads to published status (skip already-published)
+      const adsToPublish = exportableAds.filter(ad => ad.status === 'APPROVED')
+      if (adsToPublish.length > 0) {
+        try {
+          await Promise.all(adsToPublish.map(ad => {
+            return client.graphql({
+              query: updateAdMutation,
+              variables: {
+                input: {
+                  id: ad.id,
+                  status: 'PUBLISHED',
+                  approved: true
+                }
+              },
+              authMode: 'userPool'
+            })
+          }))
+        } catch (error) {
+          console.error('Error publishing exported ads:', error)
+          // Continue even if publishing fails - export was successful
+        }
       }
-      
-      setSnackbar({ open: true, message: `Exported and published ${approvedAds.length} ad(s)`, severity: 'success' })
+
+      const publishedCount = adsToPublish.length
+      const message = publishedCount > 0
+        ? `Exported ${exportableAds.length} ad(s), ${publishedCount} marked as published`
+        : `Exported ${exportableAds.length} ad(s)`
+      setSnackbar({ open: true, message, severity: 'success' })
       setSelectedAds([])
       loadAds() // Reload to show updated status
     } catch (error) {
