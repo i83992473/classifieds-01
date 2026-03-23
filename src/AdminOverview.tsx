@@ -20,7 +20,7 @@ import PeopleIcon from '@mui/icons-material/People'
 import InventoryIcon from '@mui/icons-material/Inventory'
 import PendingActionsIcon from '@mui/icons-material/PendingActions'
 import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
-import TrendingUpIcon from '@mui/icons-material/TrendingUp'
+import MailIcon from '@mui/icons-material/Mail'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import BlockIcon from '@mui/icons-material/Block'
 import ArchiveIcon from '@mui/icons-material/Archive'
@@ -120,31 +120,30 @@ function StatCard({ title, value, subtitle, icon, color, onClick }: {
       }}
       onClick={onClick}
     >
-      <Stack direction="row" justifyContent="space-between" alignItems="flex-start">
-        <Box>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5, fontWeight: 500 }}>
-            {title}
-          </Typography>
-          <Typography variant="h4" sx={{ fontWeight: 700, lineHeight: 1.2 }}>
-            {value}
-          </Typography>
-          {subtitle && (
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-              {subtitle}
-            </Typography>
-          )}
-        </Box>
+      <Stack direction="row" justifyContent="space-between" alignItems="center" sx={{ mb: 1 }}>
+        <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+          {title}
+        </Typography>
         <Box sx={{
-          p: 1,
-          borderRadius: 2,
+          p: 0.5,
+          borderRadius: 1.5,
           bgcolor: alpha(color, 0.1),
           color: color,
           display: 'flex',
           alignItems: 'center',
+          flexShrink: 0,
         }}>
           {icon}
         </Box>
       </Stack>
+      <Typography variant="h4" sx={{ fontWeight: 700, lineHeight: 1.2, textAlign: 'center' }}>
+        {value}
+      </Typography>
+      {subtitle && (
+        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block', textAlign: 'center' }}>
+          {subtitle}
+        </Typography>
+      )}
     </Paper>
   )
 }
@@ -320,7 +319,7 @@ export default function AdminOverview({ ads, users, products, discounts, unreadM
             title="Messages"
             value={unreadMessageCount}
             subtitle="Unread"
-            icon={<TrendingUpIcon />}
+            icon={<MailIcon />}
             color="#0288d1"
           />
         </Grid>
