@@ -91,7 +91,7 @@ interface AdminOverviewProps {
   products: Product[]
   discounts: Discount[]
   unreadMessageCount: number
-  onNavigate: (section: number) => void
+  onNavigate: (section: number, filter?: string[]) => void
 }
 
 // Stat card component
@@ -174,7 +174,7 @@ export default function AdminOverview({ ads, users, products, discounts, unreadM
     const blockedUsers = users.filter(u => u.isBlocked)
 
     return {
-      totalAds: ads.length,
+      totalAds: ads.filter(a => a.status !== 'ARCHIVED').length,
       pendingAds: pendingAds.length,
       publishedAds: publishedAds.length,
       approvedAds: approvedAds.length,
@@ -272,7 +272,7 @@ export default function AdminOverview({ ads, users, products, discounts, unreadM
             subtitle={`${stats.adsToday} today, ${stats.adsThisWeek} this week`}
             icon={<NewspaperIcon />}
             color={theme.palette.primary.main}
-            onClick={() => onNavigate(1)}
+            onClick={() => onNavigate(1, ['PENDING_APPROVAL', 'APPROVED', 'NOT_APPROVED', 'PUBLISHED'])}
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2 }}>
@@ -282,7 +282,7 @@ export default function AdminOverview({ ads, users, products, discounts, unreadM
             subtitle="Awaiting review"
             icon={<PendingActionsIcon />}
             color="#ed6c02"
-            onClick={() => onNavigate(1)}
+            onClick={() => onNavigate(1, ['PENDING_APPROVAL'])}
           />
         </Grid>
         <Grid size={{ xs: 12, sm: 6, md: 4, lg: 2 }}>

@@ -812,7 +812,8 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
   const [statusMenuAnchor, setStatusMenuAnchor] = useState<{ element: HTMLElement; adId: string } | null>(null)
   
   // Filter states
-  const [adStatusFilter, setAdStatusFilter] = useState<'PENDING_APPROVAL' | 'APPROVED' | 'NOT_APPROVED' | 'PUBLISHED' | 'ARCHIVED'>('PENDING_APPROVAL')
+  const ALL_STATUSES_EXCEPT_ARCHIVED = ['PENDING_APPROVAL', 'APPROVED', 'NOT_APPROVED', 'PUBLISHED'] as const
+  const [adStatusFilter, setAdStatusFilter] = useState<string[]>(['PENDING_APPROVAL'])
   const [adIdSearch, setAdIdSearch] = useState<string>('')
   const [userNameFilter, setUserNameFilter] = useState('')
   const [userEmailFilter, setUserEmailFilter] = useState('')
@@ -917,7 +918,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
   useEffect(() => {
     if (initialAdFilter) {
       setAdIdSearch(initialAdFilter)
-      setAdStatusFilter('PENDING_APPROVAL')
+      setAdStatusFilter(['PENDING_APPROVAL'])
       setActiveSection(1) // Navigate directly to Ads section
     }
   }, [initialAdFilter])
@@ -957,20 +958,10 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
       if (adIdFilter) {
         // When searching by ad ID, filter by ID only (ignore status filter)
         filter.id = { eq: adIdFilter }
-      } else {
-        // Apply status filter - filter by status field directly
-        if (adStatusFilter === 'PENDING_APPROVAL') {
-          filter.status = { eq: 'PENDING_APPROVAL' }
-        } else if (adStatusFilter === 'APPROVED') {
-          filter.status = { eq: 'APPROVED' }
-        } else if (adStatusFilter === 'NOT_APPROVED') {
-          filter.status = { eq: 'NOT_APPROVED' }
-        } else if (adStatusFilter === 'PUBLISHED') {
-          filter.status = { eq: 'PUBLISHED' }
-        } else if (adStatusFilter === 'ARCHIVED') {
-          filter.status = { eq: 'ARCHIVED' }
-        }
-        // If no filter matches, load all ads (no filter applied)
+      } else if (adStatusFilter.length === 1) {
+        filter.status = { eq: adStatusFilter[0] }
+      } else if (adStatusFilter.length > 1) {
+        filter.or = adStatusFilter.map(s => ({ status: { eq: s } }))
       }
       const result = await client.graphql({
         query: listAdsQuery,
@@ -998,7 +989,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
   
   // Reload ads when filter or search changes
   useEffect(() => {
-    if (activeSection === 1) {
+    if (activeSection === 1 && adStatusFilter.length > 0) {
       if (adIdSearch) {
         loadAds(adIdSearch)
       } else {
@@ -1781,7 +1772,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
 
   // Allowed actions per ad status
   const AD_ACTIONS_BY_STATUS: Record<string, Set<string>> = {
-    'DRAFT':              new Set(['archive', 'delete', 'message', 'changeStatus']),
+    'DRAFT':              new Set(['delete']),
     'PENDING_APPROVAL':   new Set(['approve', 'reject', 'message', 'changeStatus']),
     'APPROVED':           new Set(['publish', 'archive', 'export', 'message', 'changeStatus']),
     'NOT_APPROVED':       new Set(['archive', 'delete', 'message', 'changeStatus']),
@@ -1824,14 +1815,16 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
     }
   }
   
+  const selectableAds = ads.filter(ad => ad.status !== 'DRAFT')
+
   const handleSelectAllAds = () => {
-    if (selectedAds.length === ads.length) {
+    if (selectedAds.length === selectableAds.length) {
       setSelectedAds([])
     } else {
-      setSelectedAds(ads.map(ad => ad.id))
+      setSelectedAds(selectableAds.map(ad => ad.id))
     }
   }
-  
+
   const handleSelectAd = (adId: string) => {
     if (selectedAds.includes(adId)) {
       setSelectedAds(selectedAds.filter(id => id !== adId))
@@ -3065,7 +3058,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
         onUnreadCountChange={setUnreadMessageCount}
         onNavigateToAdmin={(adId) => {
           setAdIdSearch(adId)
-          setAdStatusFilter('PENDING_APPROVAL')
+          setAdStatusFilter(['PENDING_APPROVAL'])
           setActiveSection(1) // Switch to ADS tab
           setShowMessagesDialog(false) // Close messages dialog
         }}
@@ -3249,34 +3242,58 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                 products={products}
                 discounts={discounts}
                 unreadMessageCount={unreadMessageCount}
-                onNavigate={(section) => setActiveSection(section)}
+                onNavigate={(section, filter) => {
+                  if (filter) setAdStatusFilter(filter)
+                  if (adIdSearch) setAdIdSearch('')
+                  setActiveSection(section)
+                }}
               />
             )}
 
             {/* Ads Tab */}
             {activeSection === 1 && (
               <Paper>
-                {/* Status Filter and Bulk Actions Toolbar */}
-                <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
+                {/* Filters Row */}
+                <Box sx={{ p: 2, borderBottom: selectedAds.length > 0 ? 0 : 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 2 }}>
                   <Stack direction="row" spacing={2} alignItems="center" flexWrap="wrap">
                     <FormControl size="small" sx={{ minWidth: 200 }}>
                       <InputLabel>Status Filter</InputLabel>
                       <Select
+                        multiple
                         value={adStatusFilter}
                         label="Status Filter"
                         onChange={(e) => {
-                          setAdStatusFilter(e.target.value as 'PENDING_APPROVAL' | 'APPROVED' | 'NOT_APPROVED' | 'PUBLISHED' | 'ARCHIVED')
-                          // Clear search when changing status filter
-                          if (adIdSearch) {
-                            setAdIdSearch('')
+                          const raw = e.target.value as string[]
+                          const value = raw.filter(s => ['PENDING_APPROVAL', 'APPROVED', 'NOT_APPROVED', 'PUBLISHED', 'DRAFT', 'ARCHIVED'].includes(s))
+                          if (value.length === 0) return
+                          if (adIdSearch) setAdIdSearch('')
+                          setAdStatusFilter(value)
+                        }}
+                        renderValue={(selected) => {
+                          const labels: Record<string, string> = {
+                            PENDING_APPROVAL: 'Pending',
+                            APPROVED: 'Approved',
+                            NOT_APPROVED: 'Not Approved',
+                            PUBLISHED: 'Published',
+                            DRAFT: 'Draft',
+                            ARCHIVED: 'Archived',
                           }
+                          return (selected as string[]).filter(s => labels[s]).map(s => labels[s]).join(', ')
                         }}
                       >
-                        <MenuItem value="PENDING_APPROVAL">Pending</MenuItem>
-                        <MenuItem value="APPROVED">Approved</MenuItem>
-                        <MenuItem value="NOT_APPROVED">Not Approved</MenuItem>
-                        <MenuItem value="PUBLISHED">Published</MenuItem>
-                        <MenuItem value="ARCHIVED">Archived</MenuItem>
+                        {([
+                          ['PENDING_APPROVAL', 'Pending'],
+                          ['APPROVED', 'Approved'],
+                          ['NOT_APPROVED', 'Not Approved'],
+                          ['PUBLISHED', 'Published'],
+                          ['DRAFT', 'Draft'],
+                          ['ARCHIVED', 'Archived'],
+                        ] as const).map(([value, label]) => (
+                          <MenuItem key={value} value={value}>
+                            <Checkbox size="small" checked={adStatusFilter.includes(value)} />
+                            <ListItemText primary={label} />
+                          </MenuItem>
+                        ))}
                       </Select>
                     </FormControl>
                     <TextField
@@ -3310,8 +3327,11 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                       <RefreshIcon />
                     </IconButton>
                   </Tooltip>
-                  
-                  {selectedAds.length > 0 && (
+                </Box>
+
+                {/* Bulk Actions Row */}
+                {selectedAds.length > 0 && (
+                  <Box sx={{ px: 2, py: 1.5, borderBottom: 1, borderColor: 'divider', bgcolor: 'action.hover' }}>
                     <Stack direction="row" spacing={1} flexWrap="wrap" alignItems="center">
                       <FormControl size="small" sx={{ minWidth: 160 }}>
                         <InputLabel>Change Status</InputLabel>
@@ -3399,17 +3419,18 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                         </Tooltip>
                       )}
                     </Stack>
-                  )}
-                </Box>
+                  </Box>
+                )}
                 
                 <Table>
                   <TableHead>
                     <TableRow>
                       <TableCell padding="checkbox">
                         <Checkbox
-                          indeterminate={selectedAds.length > 0 && selectedAds.length < ads.length}
-                          checked={ads.length > 0 && selectedAds.length === ads.length}
+                          indeterminate={selectedAds.length > 0 && selectedAds.length < selectableAds.length}
+                          checked={selectableAds.length > 0 && selectedAds.length === selectableAds.length}
                           onChange={handleSelectAllAds}
+                          disabled={selectableAds.length === 0}
                         />
                       </TableCell>
                       <TableCell>Title</TableCell>
@@ -3433,19 +3454,20 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                             <Checkbox
                               checked={selectedAds.includes(ad.id)}
                               onChange={() => handleSelectAd(ad.id)}
+                              disabled={ad.status === 'DRAFT'}
                             />
                           </TableCell>
                           <TableCell>{ad.title}</TableCell>
                           <TableCell>
-                            <Box 
-                              sx={{ 
-                                display: 'inline-flex', 
+                            <Box
+                              sx={{
+                                display: 'inline-flex',
                                 alignItems: 'center',
                                 gap: 0.5,
-                                cursor: 'pointer',
-                                '&:hover': { opacity: 0.8 }
+                                cursor: ad.status === 'DRAFT' ? 'default' : 'pointer',
+                                '&:hover': ad.status === 'DRAFT' ? {} : { opacity: 0.8 }
                               }}
-                              onClick={(e) => handleStatusMenuOpen(e, ad.id)}
+                              onClick={(e) => { if (ad.status !== 'DRAFT') handleStatusMenuOpen(e, ad.id) }}
                             >
                               <Chip
                                 label={
@@ -3466,7 +3488,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
                                 }
                                 size="small"
                               />
-                              <ArrowDropDownIcon sx={{ fontSize: '1rem', color: 'text.secondary' }} />
+                              {ad.status !== 'DRAFT' && <ArrowDropDownIcon sx={{ fontSize: '1rem', color: 'text.secondary' }} />}
                             </Box>
                             <Menu
                               anchorEl={statusMenuAnchor?.adId === ad.id ? statusMenuAnchor.element : null}
