@@ -812,7 +812,6 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
   const [statusMenuAnchor, setStatusMenuAnchor] = useState<{ element: HTMLElement; adId: string } | null>(null)
   
   // Filter states
-  const ALL_STATUSES_EXCEPT_ARCHIVED = ['PENDING_APPROVAL', 'APPROVED', 'NOT_APPROVED', 'PUBLISHED'] as const
   const [adStatusFilter, setAdStatusFilter] = useState<string[]>(['PENDING_APPROVAL'])
   const [adIdSearch, setAdIdSearch] = useState<string>('')
   const [userNameFilter, setUserNameFilter] = useState('')
