@@ -275,6 +275,7 @@ interface AppliedDiscount extends Discount {
 }
 
 const SIDEBAR_WIDTH = 320;
+const PRICING_PANEL_WIDTH = 300;
 const APPBAR_HEIGHT = 64;
 
 // Custom circular plus icon component
@@ -3222,7 +3223,6 @@ function App() {
             >
               <Tab label="My Ad" />
               <Tab label="Content" />
-              <Tab label="Pricing" />
             </Tabs>
 
             {/* Hidden file input for images */}
@@ -3655,20 +3655,24 @@ function App() {
                           Edit Text
                         </Typography>
                         <Stack direction="row" spacing={0.5}>
-                          <Tooltip title="Move block up. Moves this text block one position higher in the ad.">
-                            <span>
-                              <IconButton size="small" onClick={() => moveBlockUp(selectedTextBlock.id)} disabled={isAdLocked}>
-                                <ArrowUpwardIcon fontSize="small" />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                          <Tooltip title="Move block down. Moves this text block one position lower in the ad.">
-                            <span>
-                              <IconButton size="small" onClick={() => moveBlockDown(selectedTextBlock.id)} disabled={isAdLocked}>
-                                <ArrowDownwardIcon fontSize="small" />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
+                          {blocks.findIndex(b => b.id === selectedTextBlock.id) > 0 && (
+                            <Tooltip title="Move block up. Moves this text block one position higher in the ad.">
+                              <span>
+                                <IconButton size="small" onClick={() => moveBlockUp(selectedTextBlock.id)} disabled={isAdLocked}>
+                                  <ArrowUpwardIcon fontSize="small" />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          )}
+                          {blocks.findIndex(b => b.id === selectedTextBlock.id) < blocks.length - 1 && (
+                            <Tooltip title="Move block down. Moves this text block one position lower in the ad.">
+                              <span>
+                                <IconButton size="small" onClick={() => moveBlockDown(selectedTextBlock.id)} disabled={isAdLocked}>
+                                  <ArrowDownwardIcon fontSize="small" />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          )}
                           <Tooltip title="Delete block. Permanently removes this text block from the ad.">
                             <span>
                               <IconButton size="small" color="error" onClick={() => deleteBlock(selectedTextBlock.id)} disabled={isAdLocked}>
@@ -3870,20 +3874,24 @@ function App() {
                           Edit Image
                         </Typography>
                         <Stack direction="row" spacing={0.5}>
-                          <Tooltip title="Move up">
-                            <span>
-                              <IconButton size="small" onClick={() => moveBlockUp(selectedImageBlock.id)} disabled={isAdLocked}>
-                                <ArrowUpwardIcon fontSize="small" />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
-                          <Tooltip title="Move down">
-                            <span>
-                              <IconButton size="small" onClick={() => moveBlockDown(selectedImageBlock.id)} disabled={isAdLocked}>
-                                <ArrowDownwardIcon fontSize="small" />
-                              </IconButton>
-                            </span>
-                          </Tooltip>
+                          {blocks.findIndex(b => b.id === selectedImageBlock.id) > 0 && (
+                            <Tooltip title="Move up">
+                              <span>
+                                <IconButton size="small" onClick={() => moveBlockUp(selectedImageBlock.id)} disabled={isAdLocked}>
+                                  <ArrowUpwardIcon fontSize="small" />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          )}
+                          {blocks.findIndex(b => b.id === selectedImageBlock.id) < blocks.length - 1 && (
+                            <Tooltip title="Move down">
+                              <span>
+                                <IconButton size="small" onClick={() => moveBlockDown(selectedImageBlock.id)} disabled={isAdLocked}>
+                                  <ArrowDownwardIcon fontSize="small" />
+                                </IconButton>
+                              </span>
+                            </Tooltip>
+                          )}
                           <Tooltip title="Delete">
                             <span>
                               <IconButton size="small" color="error" onClick={() => deleteBlock(selectedImageBlock.id)} disabled={isAdLocked}>
@@ -3916,328 +3924,6 @@ function App() {
             </Box>
 
 
-            {/* Tab Panel: Pricing (index 2) */}
-            <Box 
-              role="tabpanel" 
-              hidden={sidebarTab !== 2} 
-              sx={{ px: 3, py: 2, flex: 1, overflowY: 'auto' }}
-            >
-              {sidebarTab === 2 && (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {/* Pricing Breakdown */}
-                  <Box>
-                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
-                      Pricing Breakdown
-                    </Typography>
-                    <Paper variant="outlined" sx={{ mt: 1 }}>
-                      <Table size="small">
-                        <TableBody>
-                          {/* Product Pricing - moved to top */}
-                          {selectedProduct && pricing.productPrice > 0 && (
-                            <TableRow>
-                              <TableCell sx={{ borderBottom: 'none' }}>
-                                <Typography variant="body2">
-                                  Product: {products.find(p => p.id === selectedProduct)?.name || selectedProduct}
-                                </Typography>
-                              </TableCell>
-                              <TableCell align="right" sx={{ borderBottom: 'none' }}>
-                                <Typography variant="body2" fontWeight={500}>
-                                  ${pricing.productPrice.toFixed(2)}
-                                </Typography>
-                              </TableCell>
-                            </TableRow>
-                          )}
-                          
-                          {/* Dimensions - no price */}
-                          <TableRow>
-                            <TableCell sx={{ borderBottom: 'none' }}>
-                              <Typography variant="body2">
-                                Dimensions: {stats.width}" × {stats.height}"
-                              </Typography>
-                            </TableCell>
-                            <TableCell align="right" sx={{ borderBottom: 'none' }}>
-                              {/* Empty for items without price */}
-                            </TableCell>
-                          </TableRow>
-                          
-                          {/* Word Count - no price, but has pricing line item */}
-                          <TableRow>
-                            <TableCell sx={{ borderBottom: 'none' }}>
-                              <Typography variant="body2">
-                                Word Count: {stats.totalWords}
-                              </Typography>
-                            </TableCell>
-                            <TableCell align="right" sx={{ borderBottom: 'none' }}>
-                              {/* Empty */}
-                            </TableCell>
-                          </TableRow>
-                          
-                          {/* Words Pricing */}
-                          <TableRow>
-                            <TableCell sx={{ borderBottom: 'none', pl: 4 }}>
-                              <Typography variant="body2" color="text.secondary">
-                                Words ({stats.totalWords} × ${PRICING_DATA.pricePerWord.toFixed(2)})
-                              </Typography>
-                            </TableCell>
-                            <TableCell align="right" sx={{ borderBottom: 'none' }}>
-                              <Typography variant="body2" fontWeight={500}>
-                                ${pricing.wordPrice.toFixed(2)}
-                              </Typography>
-                            </TableCell>
-                          </TableRow>
-                          
-                          {/* Line Count - no price, but has pricing line item */}
-                          <TableRow>
-                            <TableCell sx={{ borderBottom: 'none' }}>
-                              <Typography variant="body2">
-                                Line Count: {stats.totalLines}
-                              </Typography>
-                            </TableCell>
-                            <TableCell align="right" sx={{ borderBottom: 'none' }}>
-                              {/* Empty */}
-                            </TableCell>
-                          </TableRow>
-                          
-                          {/* Lines Pricing */}
-                          <TableRow>
-                            <TableCell sx={{ borderBottom: 'none', pl: 4 }}>
-                              <Typography variant="body2" color="text.secondary">
-                                Lines ({stats.totalLines} × ${PRICING_DATA.pricePerLine.toFixed(2)})
-                              </Typography>
-                            </TableCell>
-                            <TableCell align="right" sx={{ borderBottom: 'none' }}>
-                              <Typography variant="body2" fontWeight={500}>
-                                ${pricing.linePrice.toFixed(2)}
-                              </Typography>
-                            </TableCell>
-                          </TableRow>
-                          
-                          {/* Text Sections - no price */}
-                          <TableRow>
-                            <TableCell sx={{ borderBottom: 'none' }}>
-                              <Typography variant="body2">
-                                Text Sections: {stats.textSections}
-                                {stats.textSectionsWithDecorations > 0 && (
-                                  <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                                    ({stats.textSectionsWithDecorations} with decorations)
-                                  </Typography>
-                                )}
-                                {stats.textSectionsWithHighlights > 0 && (
-                                  <Typography component="span" variant="caption" color="text.secondary" sx={{ ml: 1 }}>
-                                    ({stats.textSectionsWithHighlights} with highlights)
-                                  </Typography>
-                                )}
-                              </Typography>
-                            </TableCell>
-                            <TableCell align="right" sx={{ borderBottom: 'none' }}>
-                              {/* Empty */}
-                            </TableCell>
-                          </TableRow>
-                          
-                          {/* Images - no price line, but has pricing line item */}
-                          <TableRow>
-                            <TableCell sx={{ borderBottom: 'none' }}>
-                              <Typography variant="body2">
-                                Images: {stats.imageCount}
-                              </Typography>
-                            </TableCell>
-                            <TableCell align="right" sx={{ borderBottom: 'none' }}>
-                              {/* Empty */}
-                            </TableCell>
-                          </TableRow>
-                          
-                          {/* Images Pricing */}
-                          {stats.imageCount > 0 && (
-                            <TableRow>
-                              <TableCell sx={{ borderBottom: 'none', pl: 4 }}>
-                                <Typography variant="body2" color="text.secondary">
-                                  Images ({stats.imageCount} × ${PRICING_DATA.pricePerImage.toFixed(2)})
-                                </Typography>
-                              </TableCell>
-                              <TableCell align="right" sx={{ borderBottom: 'none' }}>
-                                <Typography variant="body2" fontWeight={500}>
-                                  ${pricing.imagePrice.toFixed(2)}
-                                </Typography>
-                              </TableCell>
-                            </TableRow>
-                          )}
-                          
-                          {/* Decorations Pricing */}
-                          {stats.textSectionsWithDecorations > 0 && (
-                            <TableRow>
-                              <TableCell sx={{ borderBottom: 'none', pl: 4 }}>
-                                <Typography variant="body2" color="text.secondary">
-                                  Decorations ({stats.textSectionsWithDecorations} × ${PRICING_DATA.pricePerDecoration.toFixed(2)})
-                                </Typography>
-                              </TableCell>
-                              <TableCell align="right" sx={{ borderBottom: 'none' }}>
-                                <Typography variant="body2" fontWeight={500}>
-                                  ${pricing.decorationPrice.toFixed(2)}
-                                </Typography>
-                              </TableCell>
-                            </TableRow>
-                          )}
-                          
-                          {/* Highlights Pricing */}
-                          {stats.textSectionsWithHighlights > 0 && (
-                            <TableRow>
-                              <TableCell sx={{ borderBottom: 'none', pl: 4 }}>
-                                <Typography variant="body2" color="text.secondary">
-                                  Highlights ({stats.textSectionsWithHighlights} × ${PRICING_DATA.pricePerHighlight.toFixed(2)})
-                                </Typography>
-                              </TableCell>
-                              <TableCell align="right" sx={{ borderBottom: 'none' }}>
-                                <Typography variant="body2" fontWeight={500}>
-                                  ${pricing.highlightPrice.toFixed(2)}
-                                </Typography>
-                              </TableCell>
-                            </TableRow>
-                          )}
-                          
-                          {/* Section Fees */}
-                          {selectedSections.length > 0 && pricing.sectionFees > 0 && (
-                            <TableRow>
-                              <TableCell sx={{ borderBottom: 'none', pl: 4 }}>
-                                <Typography variant="body2" color="text.secondary">
-                                  Sections ({sections.filter(s => selectedSections.includes(s.id)).map(s => s.name).join(', ')})
-                                </Typography>
-                              </TableCell>
-                              <TableCell align="right" sx={{ borderBottom: 'none' }}>
-                                <Typography variant="body2" fontWeight={500}>
-                                  ${pricing.sectionFees.toFixed(2)}
-                                </Typography>
-                              </TableCell>
-                            </TableRow>
-                          )}
-
-                          {/* Sub-Section Fees */}
-                          {selectedSubSections.length > 0 && pricing.subSectionFees > 0 && (
-                            <TableRow>
-                              <TableCell sx={{ borderBottom: 'none', pl: 4 }}>
-                                <Typography variant="body2" color="text.secondary">
-                                  Sub-Sections ({subSections.filter(ss => selectedSubSections.includes(ss.id)).map(ss => ss.name).join(', ')})
-                                </Typography>
-                              </TableCell>
-                              <TableCell align="right" sx={{ borderBottom: 'none' }}>
-                                <Typography variant="body2" fontWeight={500}>
-                                  ${pricing.subSectionFees.toFixed(2)}
-                                </Typography>
-                              </TableCell>
-                            </TableRow>
-                          )}
-
-                          {/* Placement Fees */}
-                          {selectedPlacements.length > 0 && pricing.placementFees > 0 && (
-                            <TableRow>
-                              <TableCell sx={{ borderBottom: 'none', pl: 4 }}>
-                                <Typography variant="body2" color="text.secondary">
-                                  Placements ({placements.filter(p => selectedPlacements.includes(p.id)).map(p => p.name).join(', ')})
-                                </Typography>
-                              </TableCell>
-                              <TableCell align="right" sx={{ borderBottom: 'none' }}>
-                                <Typography variant="body2" fontWeight={500}>
-                                  ${pricing.placementFees.toFixed(2)}
-                                </Typography>
-                              </TableCell>
-                            </TableRow>
-                          )}
-
-                          {/* Subtotal (only shown when discounts are applied) */}
-                          {pricing.totalDiscountAmount > 0 && (
-                            <TableRow>
-                              <TableCell sx={{ borderTop: 1, borderColor: 'divider' }}>
-                                <Typography variant="body2" fontWeight={600}>Subtotal</Typography>
-                              </TableCell>
-                              <TableCell align="right" sx={{ borderTop: 1, borderColor: 'divider' }}>
-                                <Typography variant="body2" fontWeight={500}>
-                                  ${pricing.subtotal.toFixed(2)}
-                                </Typography>
-                              </TableCell>
-                            </TableRow>
-                          )}
-
-                          {/* Discount rows */}
-                          {pricing.discountDetails.map(d => (
-                            <TableRow key={d.id}>
-                              <TableCell sx={{ borderBottom: 'none', pl: 4 }}>
-                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                  <Typography variant="body2" color="success.main">
-                                    {d.name}
-                                    {d.code && ` (${d.code})`}
-                                    {' — '}
-                                    {d.discountType === 'FLAT' ? `-$${d.value.toFixed(2)}` : `-${d.value}%`}
-                                  </Typography>
-                                  {!d.isAutomatic && (
-                                    <IconButton
-                                      size="small"
-                                      sx={{ p: 0, ml: 0.5 }}
-                                      onClick={() => removeDiscount(d.id)}
-                                    >
-                                      <CloseIcon sx={{ fontSize: 14 }} />
-                                    </IconButton>
-                                  )}
-                                </Box>
-                              </TableCell>
-                              <TableCell align="right" sx={{ borderBottom: 'none' }}>
-                                <Typography variant="body2" color="success.main" fontWeight={500}>
-                                  -${d.computedAmount.toFixed(2)}
-                                </Typography>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-
-                          {/* Total */}
-                          <TableRow>
-                            <TableCell sx={{ borderTop: pricing.totalDiscountAmount > 0 ? 0 : 1, borderColor: 'divider' }}>
-                              <Typography variant="body2" fontWeight={600}>
-                                {pricing.totalDiscountAmount > 0 ? 'Total After Discounts' : 'Total'}
-                              </Typography>
-                            </TableCell>
-                            <TableCell align="right" sx={{ borderTop: pricing.totalDiscountAmount > 0 ? 0 : 1, borderColor: 'divider' }}>
-                              <Typography variant="body2" fontWeight={700} fontSize="1.1rem">
-                                ${pricing.finalTotal.toFixed(2)}
-                              </Typography>
-                            </TableCell>
-                          </TableRow>
-                        </TableBody>
-                      </Table>
-                    </Paper>
-                  </Box>
-
-                  {/* Coupon Code */}
-                  <Box>
-                    <Typography variant="subtitle2" gutterBottom fontWeight={600}>
-                      Promo Code
-                    </Typography>
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                      <TextField
-                        size="small"
-                        placeholder="Enter code"
-                        value={couponInput}
-                        onChange={(e) => { setCouponInput(e.target.value.toUpperCase()); setCouponError('') }}
-                        onKeyDown={(e) => e.key === 'Enter' && applyCoupon()}
-                        error={!!couponError}
-                        helperText={couponError}
-                        sx={{ flex: 1 }}
-                        inputProps={{ style: { textTransform: 'uppercase' } }}
-                      />
-                      <Button variant="outlined" size="small" onClick={applyCoupon} sx={{ alignSelf: 'flex-start' }}>
-                        Apply
-                      </Button>
-                    </Box>
-                    {appliedDiscounts.filter(d => d.isAutomatic).length > 0 && (
-                      <Box sx={{ mt: 1 }}>
-                        {appliedDiscounts.filter(d => d.isAutomatic).map(d => (
-                          <Typography key={d.id} variant="caption" color="success.main" display="block">
-                            ✓ {d.name} applied automatically
-                          </Typography>
-                        ))}
-                      </Box>
-                    )}
-                  </Box>
-                </Box>
-              )}
-            </Box>
           </Box>
       </Paper>
 
@@ -4246,7 +3932,8 @@ function App() {
         onClick={() => setSelectedBlockId(null)}
         sx={{
           ml: `${sidebarWidth}px`,
-          width: `calc(100vw - ${sidebarWidth}px)`,
+          mr: `${PRICING_PANEL_WIDTH}px`,
+          width: `calc(100vw - ${sidebarWidth}px - ${PRICING_PANEL_WIDTH}px)`,
           height: `calc(100vh - ${APPBAR_HEIGHT}px)`,
           mt: `${APPBAR_HEIGHT}px`,
           display: 'flex',
@@ -4424,79 +4111,401 @@ function App() {
                   </Typography>
                 </Box>
               )}
-              {blocks.map((block, index) =>
-                block.type === 'text' ? (
-                  <Box
-                    key={block.id}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setSelectedBlockId(block.id)
-                      setSidebarTab(1)
-                    }}
-                    className={`block-text ${selectedBlockId === block.id ? 'selected' : ''}`}
-                    sx={{
-                      mt: index === 0 ? 0 : 0, // No top margin - padding comes from Paper
-                      mb: 0, // No bottom margin
-                      px: block.highlight && block.highlight !== 'none' ? 0.5 : 0,
-                      py: block.highlight && block.highlight !== 'none' ? 0.25 : 0,
-                      fontWeight: block.bold ? 'bold' : 'normal',
-                      fontStyle: block.italic ? 'italic' : 'normal',
-                      textDecoration: block.underline ? 'underline' : 'none',
-                      fontSize: block.fontSize || TEXT_SIZE_MAP[block.size || 'medium'],
-                      fontFamily: FONT_MAP[block.font || 'serif'],
-                      textAlign: block.alignment || 'left',
-                      color: HIGHLIGHT_STYLE_MAP[block.highlight || 'none'].color,
-                      backgroundColor: HIGHLIGHT_STYLE_MAP[block.highlight || 'none'].backgroundColor,
-                      lineHeight: 1.4,
-                      display: 'block',
-                      width: '100%',
-                    }}
-                  >
-                    {block.text}
-                  </Box>
-                ) : (
-                  <Box
-                    key={block.id}
-                    data-block-id={block.id}
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setSelectedBlockId(block.id)
-                      setSidebarTab(1)
-                    }}
-                    className={`block-image ${selectedBlockId === block.id ? 'selected' : ''}`}
-                    sx={{
-                      mt: 0, // No top margin
-                      mb: 0, // No bottom margin
-                      display: 'flex',
-                      justifyContent: 'center',
-                      width: '100%',
-                    }}
-                  >
-                    <img
-                      src={block.src}
-                      alt="Ad"
-                      crossOrigin="anonymous"
-                      loading="eager"
-                      style={{
+              {blocks.map((block, index) => (
+                <Box
+                  key={block.id}
+                  sx={{
+                    position: 'relative',
+                    '&:hover .block-move-arrows': {
+                      opacity: 1,
+                    },
+                  }}
+                >
+                  {/* Floating move arrows */}
+                  {!isAdLocked && blocks.length > 1 && (
+                    <Stack
+                      className="block-move-arrows"
+                      direction="column"
+                      sx={{
+                        position: 'absolute',
+                        right: -36,
+                        top: '50%',
+                        transform: 'translateY(-50%)',
+                        opacity: 0,
+                        transition: 'opacity 0.15s',
+                        zIndex: 10,
+                        bgcolor: 'background.paper',
+                        borderRadius: 1,
+                        boxShadow: 2,
+                        overflow: 'hidden',
+                      }}
+                    >
+                      {index > 0 && (
+                        <IconButton
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedBlockId(block.id)
+                            setSidebarTab(1)
+                            moveBlockUp(block.id)
+                          }}
+                          sx={{ borderRadius: 0, px: 0.5, py: 0.25 }}
+                        >
+                          <ArrowUpwardIcon sx={{ fontSize: 16 }} />
+                        </IconButton>
+                      )}
+                      {index < blocks.length - 1 && (
+                        <IconButton
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedBlockId(block.id)
+                            setSidebarTab(1)
+                            moveBlockDown(block.id)
+                          }}
+                          sx={{ borderRadius: 0, px: 0.5, py: 0.25 }}
+                        >
+                          <ArrowDownwardIcon sx={{ fontSize: 16 }} />
+                        </IconButton>
+                      )}
+                    </Stack>
+                  )}
+
+                  {block.type === 'text' ? (
+                    <Box
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setSelectedBlockId(block.id)
+                        setSidebarTab(1)
+                      }}
+                      className={`block-text ${selectedBlockId === block.id ? 'selected' : ''}`}
+                      sx={{
+                        px: block.highlight && block.highlight !== 'none' ? 0.5 : 0,
+                        py: block.highlight && block.highlight !== 'none' ? 0.25 : 0,
+                        fontWeight: block.bold ? 'bold' : 'normal',
+                        fontStyle: block.italic ? 'italic' : 'normal',
+                        textDecoration: block.underline ? 'underline' : 'none',
+                        fontSize: block.fontSize || TEXT_SIZE_MAP[block.size || 'medium'],
+                        fontFamily: FONT_MAP[block.font || 'serif'],
+                        textAlign: block.alignment || 'left',
+                        color: HIGHLIGHT_STYLE_MAP[block.highlight || 'none'].color,
+                        backgroundColor: HIGHLIGHT_STYLE_MAP[block.highlight || 'none'].backgroundColor,
+                        lineHeight: 1.4,
                         display: 'block',
                         width: '100%',
-                        height: 'auto',
-                        margin: 0,
-                        padding: 0,
                       }}
-                      onError={(e) => {
-                        console.error('Image failed to load:', block.src)
-                        const target = e.target as HTMLImageElement
-                        target.style.display = 'none'
+                    >
+                      {block.text}
+                    </Box>
+                  ) : (
+                    <Box
+                      data-block-id={block.id}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setSelectedBlockId(block.id)
+                        setSidebarTab(1)
                       }}
-                    />
-                  </Box>
-                )
-              )}
+                      className={`block-image ${selectedBlockId === block.id ? 'selected' : ''}`}
+                      sx={{
+                        display: 'flex',
+                        justifyContent: 'center',
+                        width: '100%',
+                      }}
+                    >
+                      <img
+                        src={block.src}
+                        alt="Ad"
+                        crossOrigin="anonymous"
+                        loading="eager"
+                        style={{
+                          display: 'block',
+                          width: '100%',
+                          height: 'auto',
+                          margin: 0,
+                          padding: 0,
+                        }}
+                        onError={(e) => {
+                          console.error('Image failed to load:', block.src)
+                          const target = e.target as HTMLImageElement
+                          target.style.display = 'none'
+                        }}
+                      />
+                    </Box>
+                  )}
+                </Box>
+              ))}
             </Paper>
           </Box>
         )}
       </Box>
+
+      {/* Pricing Panel - Always Visible Right Side */}
+      <Paper
+        elevation={0}
+        sx={{
+          position: 'fixed',
+          right: 0,
+          top: APPBAR_HEIGHT,
+          width: PRICING_PANEL_WIDTH,
+          height: `calc(100vh - ${APPBAR_HEIGHT}px)`,
+          overflowY: 'auto',
+          borderLeft: 1,
+          borderColor: 'divider',
+          bgcolor: 'background.paper',
+          zIndex: 1200,
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        <Box sx={{ px: 2, py: 2, flex: 1 }}>
+          <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1.5 }}>
+            Pricing Breakdown
+          </Typography>
+          <Table size="small">
+            <TableBody>
+              {/* Product */}
+              {selectedProduct && pricing.productPrice > 0 && (
+                <TableRow>
+                  <TableCell sx={{ borderBottom: 'none', px: 0, py: 0.5 }}>
+                    <Typography variant="caption">
+                      {products.find(p => p.id === selectedProduct)?.name || 'Product'}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ borderBottom: 'none', px: 0, py: 0.5 }}>
+                    <Typography variant="caption" fontWeight={500}>
+                      ${pricing.productPrice.toFixed(2)}
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
+
+              {/* Dimensions */}
+              <TableRow>
+                <TableCell sx={{ borderBottom: 'none', px: 0, py: 0.5 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Dimensions: {stats.width}" x {stats.height}"
+                  </Typography>
+                </TableCell>
+                <TableCell sx={{ borderBottom: 'none', px: 0, py: 0.5 }} />
+              </TableRow>
+
+              {/* Words */}
+              <TableRow>
+                <TableCell sx={{ borderBottom: 'none', px: 0, py: 0.5 }}>
+                  <Typography variant="caption">
+                    Words ({stats.totalWords} x ${PRICING_DATA.pricePerWord.toFixed(2)})
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ borderBottom: 'none', px: 0, py: 0.5 }}>
+                  <Typography variant="caption" fontWeight={500}>
+                    ${pricing.wordPrice.toFixed(2)}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+
+              {/* Lines */}
+              <TableRow>
+                <TableCell sx={{ borderBottom: 'none', px: 0, py: 0.5 }}>
+                  <Typography variant="caption">
+                    Lines ({stats.totalLines} x ${PRICING_DATA.pricePerLine.toFixed(2)})
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ borderBottom: 'none', px: 0, py: 0.5 }}>
+                  <Typography variant="caption" fontWeight={500}>
+                    ${pricing.linePrice.toFixed(2)}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+
+              {/* Images */}
+              {stats.imageCount > 0 && (
+                <TableRow>
+                  <TableCell sx={{ borderBottom: 'none', px: 0, py: 0.5 }}>
+                    <Typography variant="caption">
+                      Images ({stats.imageCount} x ${PRICING_DATA.pricePerImage.toFixed(2)})
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ borderBottom: 'none', px: 0, py: 0.5 }}>
+                    <Typography variant="caption" fontWeight={500}>
+                      ${pricing.imagePrice.toFixed(2)}
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
+
+              {/* Decorations */}
+              {stats.textSectionsWithDecorations > 0 && (
+                <TableRow>
+                  <TableCell sx={{ borderBottom: 'none', px: 0, py: 0.5 }}>
+                    <Typography variant="caption">
+                      Decorations ({stats.textSectionsWithDecorations} x ${PRICING_DATA.pricePerDecoration.toFixed(2)})
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ borderBottom: 'none', px: 0, py: 0.5 }}>
+                    <Typography variant="caption" fontWeight={500}>
+                      ${pricing.decorationPrice.toFixed(2)}
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
+
+              {/* Highlights */}
+              {stats.textSectionsWithHighlights > 0 && (
+                <TableRow>
+                  <TableCell sx={{ borderBottom: 'none', px: 0, py: 0.5 }}>
+                    <Typography variant="caption">
+                      Highlights ({stats.textSectionsWithHighlights} x ${PRICING_DATA.pricePerHighlight.toFixed(2)})
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ borderBottom: 'none', px: 0, py: 0.5 }}>
+                    <Typography variant="caption" fontWeight={500}>
+                      ${pricing.highlightPrice.toFixed(2)}
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
+
+              {/* Section Fees */}
+              {selectedSections.length > 0 && pricing.sectionFees > 0 && (
+                <TableRow>
+                  <TableCell sx={{ borderBottom: 'none', px: 0, py: 0.5 }}>
+                    <Typography variant="caption">
+                      Sections ({sections.filter(s => selectedSections.includes(s.id)).map(s => s.name).join(', ')})
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ borderBottom: 'none', px: 0, py: 0.5 }}>
+                    <Typography variant="caption" fontWeight={500}>
+                      ${pricing.sectionFees.toFixed(2)}
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
+
+              {/* Sub-Section Fees */}
+              {selectedSubSections.length > 0 && pricing.subSectionFees > 0 && (
+                <TableRow>
+                  <TableCell sx={{ borderBottom: 'none', px: 0, py: 0.5 }}>
+                    <Typography variant="caption">
+                      Sub-Sections ({subSections.filter(ss => selectedSubSections.includes(ss.id)).map(ss => ss.name).join(', ')})
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ borderBottom: 'none', px: 0, py: 0.5 }}>
+                    <Typography variant="caption" fontWeight={500}>
+                      ${pricing.subSectionFees.toFixed(2)}
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
+
+              {/* Placement Fees */}
+              {selectedPlacements.length > 0 && pricing.placementFees > 0 && (
+                <TableRow>
+                  <TableCell sx={{ borderBottom: 'none', px: 0, py: 0.5 }}>
+                    <Typography variant="caption">
+                      Placements ({placements.filter(p => selectedPlacements.includes(p.id)).map(p => p.name).join(', ')})
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ borderBottom: 'none', px: 0, py: 0.5 }}>
+                    <Typography variant="caption" fontWeight={500}>
+                      ${pricing.placementFees.toFixed(2)}
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
+
+              {/* Subtotal (only when discounts applied) */}
+              {pricing.totalDiscountAmount > 0 && (
+                <TableRow>
+                  <TableCell sx={{ borderTop: 1, borderColor: 'divider', px: 0, py: 0.5 }}>
+                    <Typography variant="caption" fontWeight={600}>Subtotal</Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={{ borderTop: 1, borderColor: 'divider', px: 0, py: 0.5 }}>
+                    <Typography variant="caption" fontWeight={500}>
+                      ${pricing.subtotal.toFixed(2)}
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              )}
+
+              {/* Discount rows */}
+              {pricing.discountDetails.map(d => (
+                <TableRow key={d.id}>
+                  <TableCell sx={{ borderBottom: 'none', px: 0, py: 0.5 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <Typography variant="caption" color="success.main">
+                        {d.name}
+                        {d.code && ` (${d.code})`}
+                        {' — '}
+                        {d.discountType === 'FLAT' ? `-$${d.value.toFixed(2)}` : `-${d.value}%`}
+                      </Typography>
+                      {!d.isAutomatic && (
+                        <IconButton
+                          size="small"
+                          sx={{ p: 0, ml: 0.5 }}
+                          onClick={() => removeDiscount(d.id)}
+                        >
+                          <CloseIcon sx={{ fontSize: 12 }} />
+                        </IconButton>
+                      )}
+                    </Box>
+                  </TableCell>
+                  <TableCell align="right" sx={{ borderBottom: 'none', px: 0, py: 0.5 }}>
+                    <Typography variant="caption" color="success.main" fontWeight={500}>
+                      -${d.computedAmount.toFixed(2)}
+                    </Typography>
+                  </TableCell>
+                </TableRow>
+              ))}
+
+              {/* Total */}
+              <TableRow>
+                <TableCell sx={{ borderTop: 1, borderColor: 'divider', px: 0, py: 1 }}>
+                  <Typography variant="body2" fontWeight={600}>
+                    {pricing.totalDiscountAmount > 0 ? 'Total' : 'Total'}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={{ borderTop: 1, borderColor: 'divider', px: 0, py: 1 }}>
+                  <Typography variant="body2" fontWeight={700} fontSize="1.1rem">
+                    ${pricing.finalTotal.toFixed(2)}
+                  </Typography>
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
+
+          {/* Coupon Code */}
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="subtitle2" fontWeight={600} sx={{ mb: 1 }}>
+              Promo Code
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 1 }}>
+              <TextField
+                size="small"
+                placeholder="Enter code"
+                value={couponInput}
+                onChange={(e) => { setCouponInput(e.target.value.toUpperCase()); setCouponError('') }}
+                onKeyDown={(e) => e.key === 'Enter' && applyCoupon()}
+                error={!!couponError}
+                helperText={couponError}
+                sx={{ flex: 1 }}
+                inputProps={{ style: { textTransform: 'uppercase', fontSize: '0.8rem' } }}
+              />
+              <Button variant="outlined" size="small" onClick={applyCoupon} sx={{ alignSelf: 'flex-start', fontSize: '0.75rem' }}>
+                Apply
+              </Button>
+            </Box>
+            {appliedDiscounts.filter(d => d.isAutomatic).length > 0 && (
+              <Box sx={{ mt: 1 }}>
+                {appliedDiscounts.filter(d => d.isAutomatic).map(d => (
+                  <Typography key={d.id} variant="caption" color="success.main" display="block">
+                    ✓ {d.name} applied automatically
+                  </Typography>
+                ))}
+              </Box>
+            )}
+          </Box>
+        </Box>
+      </Paper>
 
       {/* Snackbar for notifications */}
       <Snackbar

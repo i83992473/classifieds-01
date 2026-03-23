@@ -69,8 +69,16 @@ import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import AddIcon from '@mui/icons-material/Add'
 import DragIndicatorIcon from '@mui/icons-material/DragIndicator'
 import SortByAlphaIcon from '@mui/icons-material/SortByAlpha'
+import DashboardIcon from '@mui/icons-material/Dashboard'
+import NewspaperIcon from '@mui/icons-material/Newspaper'
+import PeopleIcon from '@mui/icons-material/People'
+import InventoryIcon from '@mui/icons-material/Inventory'
+import AttachMoneyIcon from '@mui/icons-material/AttachMoney'
+import LocalOfferIcon from '@mui/icons-material/LocalOffer'
+import MenuIcon from '@mui/icons-material/Menu'
 import { getUrl } from 'aws-amplify/storage'
 import MessagesDialog from './MessagesDialog'
+import AdminOverview from './AdminOverview'
 import { updateUser } from './graphql/mutations'
 import JSZip from 'jszip'
 import {
@@ -780,7 +788,8 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
   const client = generateClient()
   const { user, signOut } = useAuthenticator()
   
-  const [activeTab, setActiveTab] = useState(0)
+  const [activeSection, setActiveSection] = useState(0) // 0=Overview, 1=Ads, 2=Users, 3=Products, 4=Pricing, 5=Discounts
+  const [sidebarOpen, setSidebarOpen] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' | 'warning' }>({
     open: false,
@@ -790,6 +799,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
   
   // Data states
   const [ads, setAds] = useState<Ad[]>([])
+  const [allAds, setAllAds] = useState<Ad[]>([]) // Unfiltered ads for overview stats
   const [users, setUsers] = useState<User[]>([])
   const [products, setProducts] = useState<Product[]>([])
   const [pricingSettings, setPricingSettings] = useState<PricingSetting[]>([])
@@ -903,22 +913,42 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
     zip: '',
   })
 
-  // Initialize ad ID search from initialAdFilter and switch to PENDING_APPROVAL
+  // Initialize ad ID search from initialAdFilter and switch to Ads section
   useEffect(() => {
     if (initialAdFilter) {
       setAdIdSearch(initialAdFilter)
       setAdStatusFilter('PENDING_APPROVAL')
+      setActiveSection(1) // Navigate directly to Ads section
     }
   }, [initialAdFilter])
 
-  // Load data based on active tab
+  // Load data based on active section
   useEffect(() => {
-    if (activeTab === 0) { loadAds(adIdSearch || initialAdFilter); loadUsers() }
-    else if (activeTab === 1) loadUsers()
-    else if (activeTab === 2) { loadProducts(); loadAllPlacements(); loadAllSections(); loadAllSubSections() }
-    else if (activeTab === 3) loadPricingSettings()
-    else if (activeTab === 4) { loadDiscounts(); loadProducts(); loadAllPlacements(); loadAllSections() }
-  }, [activeTab, initialAdFilter, adIdSearch])
+    if (activeSection === 0) { loadAllAds(); loadUsers(); loadProducts(); loadDiscounts() } // Overview: load all summary data
+    else if (activeSection === 1) { loadAds(adIdSearch || initialAdFilter); loadUsers() }
+    else if (activeSection === 2) loadUsers()
+    else if (activeSection === 3) { loadProducts(); loadAllPlacements(); loadAllSections(); loadAllSubSections() }
+    else if (activeSection === 4) loadPricingSettings()
+    else if (activeSection === 5) { loadDiscounts(); loadProducts(); loadAllPlacements(); loadAllSections() }
+  }, [activeSection, initialAdFilter, adIdSearch])
+
+  // Load all ads unfiltered (for overview stats)
+  const loadAllAds = async () => {
+    try {
+      const result = await client.graphql({
+        query: listAdsQuery,
+        variables: {},
+        authMode: 'userPool'
+      }) as { data: { listAds: { items: Ad[] } } }
+      const items = (result.data.listAds.items || []).map(ad => ({
+        ...ad,
+        status: ad.status || 'DRAFT'
+      }))
+      setAllAds(items)
+    } catch (error) {
+      console.error('Error loading all ads for overview:', error)
+    }
+  }
 
   const loadAds = async (adIdFilter?: string) => {
     setIsLoading(true)
@@ -968,21 +998,21 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
   
   // Reload ads when filter or search changes
   useEffect(() => {
-    if (activeTab === 0) {
+    if (activeSection === 1) {
       if (adIdSearch) {
         loadAds(adIdSearch)
       } else {
         loadAds()
       }
     }
-  }, [adStatusFilter, activeTab, adIdSearch])
-  
+  }, [adStatusFilter, activeSection, adIdSearch])
+
   // Reload users when filters change
   useEffect(() => {
-    if (activeTab === 1) {
+    if (activeSection === 2) {
       // Users are already loaded, filtering is done client-side
     }
-  }, [userNameFilter, userEmailFilter, userAdminFilter, activeTab])
+  }, [userNameFilter, userEmailFilter, userAdminFilter, activeSection])
 
   const loadUsers = async () => {
     setIsLoading(true)
@@ -2977,10 +3007,13 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
 
   return (
     <Box sx={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', bgcolor: 'background.default', overflow: 'hidden' }}>
-      <AppBar position="fixed">
+      <AppBar position="fixed" sx={{ zIndex: (theme) => theme.zIndex.drawer + 1 }}>
         <Toolbar>
-          <IconButton color="inherit" onClick={onBack} edge="start" sx={{ mr: 2 }}>
+          <IconButton color="inherit" onClick={onBack} edge="start" sx={{ mr: 1 }}>
             <ArrowBackIcon />
+          </IconButton>
+          <IconButton color="inherit" onClick={() => setSidebarOpen(!sidebarOpen)} sx={{ mr: 1 }}>
+            <MenuIcon />
           </IconButton>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             Admin Dashboard
@@ -3033,7 +3066,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
         onNavigateToAdmin={(adId) => {
           setAdIdSearch(adId)
           setAdStatusFilter('PENDING_APPROVAL')
-          setActiveTab(0) // Switch to ADS tab
+          setActiveSection(1) // Switch to ADS tab
           setShowMessagesDialog(false) // Close messages dialog
         }}
       />
@@ -3129,25 +3162,99 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
         </DialogActions>
       </Dialog>
       
-      <Box sx={{ flex: 1, overflowY: 'auto', pt: 10, px: 3, pb: 3 }}>
-        <Paper sx={{ mb: 3 }}>
-          <Tabs value={activeTab} onChange={(_, v) => setActiveTab(v)} variant="fullWidth">
-            <Tab label="Ads" />
-            <Tab label="Users" />
-            <Tab label="Products" />
-            <Tab label="Pricing" />
-            <Tab label="Discounts" />
-          </Tabs>
-        </Paper>
+      {/* Sidebar */}
+      <Box
+        component="nav"
+        sx={{
+          position: 'fixed',
+          top: 64,
+          left: 0,
+          bottom: 0,
+          width: sidebarOpen ? 220 : 0,
+          overflow: 'hidden',
+          transition: 'width 0.2s ease',
+          bgcolor: 'background.paper',
+          borderRight: sidebarOpen ? 1 : 0,
+          borderColor: 'divider',
+          zIndex: (theme) => theme.zIndex.drawer,
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        <List disablePadding sx={{ pt: 1 }}>
+          {[
+            { label: 'Overview', icon: <DashboardIcon />, section: 0 },
+            { label: 'Ads', icon: <NewspaperIcon />, section: 1 },
+            { label: 'Users', icon: <PeopleIcon />, section: 2 },
+            { label: 'Products', icon: <InventoryIcon />, section: 3 },
+            { label: 'Pricing', icon: <AttachMoneyIcon />, section: 4 },
+            { label: 'Discounts', icon: <LocalOfferIcon />, section: 5 },
+          ].map(({ label, icon, section }) => (
+            <ListItem
+              key={section}
+              disablePadding
+              sx={{ display: 'block' }}
+            >
+              <Box
+                onClick={() => setActiveSection(section)}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1.5,
+                  px: 2.5,
+                  py: 1.5,
+                  cursor: 'pointer',
+                  bgcolor: activeSection === section ? 'action.selected' : 'transparent',
+                  borderRight: activeSection === section ? 3 : 0,
+                  borderColor: 'primary.main',
+                  color: activeSection === section ? 'primary.main' : 'text.primary',
+                  fontWeight: activeSection === section ? 600 : 400,
+                  transition: 'background-color 0.15s',
+                  '&:hover': {
+                    bgcolor: activeSection === section ? 'action.selected' : 'action.hover',
+                  },
+                }}
+              >
+                {icon}
+                <Typography variant="body2" sx={{ fontWeight: 'inherit' }}>
+                  {label}
+                </Typography>
+              </Box>
+            </ListItem>
+          ))}
+        </List>
+      </Box>
 
+      {/* Main Content */}
+      <Box sx={{
+        flex: 1,
+        overflowY: 'auto',
+        pt: 10,
+        px: 3,
+        pb: 3,
+        ml: sidebarOpen ? '220px' : 0,
+        transition: 'margin-left 0.2s ease',
+      }}>
         {isLoading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
             <CircularProgress />
           </Box>
         ) : (
           <>
+            {/* Overview */}
+            {activeSection === 0 && (
+              <AdminOverview
+                ads={allAds}
+                users={users}
+                products={products}
+                discounts={discounts}
+                unreadMessageCount={unreadMessageCount}
+                onNavigate={(section) => setActiveSection(section)}
+              />
+            )}
+
             {/* Ads Tab */}
-            {activeTab === 0 && (
+            {activeSection === 1 && (
               <Paper>
                 {/* Status Filter and Bulk Actions Toolbar */}
                 <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 2 }}>
@@ -3448,7 +3555,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
             )}
 
             {/* Users Tab */}
-            {activeTab === 1 && (
+            {activeSection === 2 && (
               <Paper>
                 {/* Filters and Bulk Actions Toolbar */}
                 <Box sx={{ p: 2, borderBottom: 1, borderColor: 'divider', display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -3553,7 +3660,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
             )}
 
             {/* Products Tab */}
-            {activeTab === 2 && (
+            {activeSection === 3 && (
               <Paper>
                 <Tabs value={productsSubTab} onChange={(_, v) => setProductsSubTab(v)} sx={{ borderBottom: 1, borderColor: 'divider', px: 2 }}>
                   <Tab label="Products" />
@@ -4127,7 +4234,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
             )}
 
             {/* Pricing Tab */}
-            {activeTab === 3 && (
+            {activeSection === 4 && (
               <Paper sx={{ p: 3 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                   <Typography variant="h6">Pricing Matrix</Typography>
@@ -4509,7 +4616,7 @@ export default function AdminDashboard({ onBack, initialAdFilter }: AdminDashboa
             )}
 
             {/* Discounts Tab */}
-            {activeTab === 4 && (
+            {activeSection === 5 && (
               <Paper sx={{ p: 3 }}>
                 <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                   <Typography variant="h6">Discounts</Typography>
