@@ -150,6 +150,15 @@ const schema = a.schema({
     allow.authenticated().to(['read']),
   ]),
 
+  SiteSettings: a.model({
+    settingKey: a.string().required(),  // 'global' — single-record pattern
+    colorScheme: a.string().default('greyscale'),
+    splashContent: a.string(),  // JSON: { siteName, heroTitle, heroSubtitle, ctaText, cards: [{title, text, icon, imageKey}], heroIcon, heroImageKey }
+  }).authorization(allow => [
+    allow.authenticated().to(['read']),
+    allow.group('Admin'),
+  ]),
+
   Message: a.model({
     senderId: a.string(),
     senderEmail: a.string().required(),

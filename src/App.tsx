@@ -61,10 +61,8 @@ import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import ContactsIcon from '@mui/icons-material/Contacts'
 import AdminPanelSettingsIcon from '@mui/icons-material/AdminPanelSettings'
 import MailIcon from '@mui/icons-material/Mail'
-import NewspaperIcon from '@mui/icons-material/Newspaper'
-import CreateIcon from '@mui/icons-material/Create'
-import DescriptionIcon from '@mui/icons-material/Description'
-import ImageIcon from '@mui/icons-material/Image'
+import SettingsIcon from '@mui/icons-material/Settings'
+// Icons moved to SiteSetup.tsx icon map; referenced via getIconComponent
 import GetStartedIcon from '@mui/icons-material/ArrowForward'
 import DownloadIcon from '@mui/icons-material/Download'
 import Badge from '@mui/material/Badge'
@@ -75,6 +73,9 @@ import JSZip from 'jszip'
 import AdminDashboard from './AdminDashboard'
 import MessagesDialog from './MessagesDialog'
 import PaymentDialog from './PaymentDialog'
+import SiteSetup from './SiteSetup'
+import { useThemeContext } from './ThemeContext'
+import { getIconComponent } from './SiteSetup'
 import './App.css'
 
 // Import GraphQL operations
@@ -332,10 +333,12 @@ function App() {
 
   // Admin and messaging state
   const [showAdminDashboard, setShowAdminDashboard] = useState(false)
+  const [showSiteSetup, setShowSiteSetup] = useState(false)
   const [showMessagesDialog, setShowMessagesDialog] = useState(false)
   const [isAdmin, setIsAdmin] = useState(false)
   const [unreadMessageCount, setUnreadMessageCount] = useState(0)
   const [showLandingPage, setShowLandingPage] = useState(true)
+  const { siteSettings, imageUrls } = useThemeContext()
   
   // Products loaded from database
   const [products, setProducts] = useState<Array<{ id: string; name: string; widthInches: number; basePrice: number; isArchived?: boolean }>>([])
@@ -2293,6 +2296,16 @@ function App() {
     return <AdminDashboard onBack={() => { setShowAdminDashboard(false); setAdminDashboardAdFilter(undefined) }} initialAdFilter={adminDashboardAdFilter} />
   }
 
+  // Show site setup if open (only for admins)
+  if (showSiteSetup) {
+    if (!isAdmin) {
+      setShowSiteSetup(false)
+      setSnackbar({ open: true, message: 'Access denied. Admin privileges required.', severity: 'error' })
+      return null
+    }
+    return <SiteSetup onBack={() => setShowSiteSetup(false)} />
+  }
+
   // Show landing page if enabled
   if (showLandingPage) {
     return (
@@ -2301,9 +2314,9 @@ function App() {
         <AppBar position="fixed" sx={{ zIndex: 1300 }}>
           <Toolbar>
             <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-              📰 Classified Ad Builder
+              {siteSettings.splashContent.siteName}
             </Typography>
-            
+
             <Tooltip title="Create new ad. Starts a new classified ad from scratch.">
               <IconButton color="inherit" onClick={() => { setShowLandingPage(false); newAd(); }}>
                 <NoteAddIcon />
@@ -2603,6 +2616,12 @@ function App() {
               <ListItemText primary="Admin Dashboard" />
             </MenuItem>
           )}
+          {isAdmin && (
+            <MenuItem onClick={() => { setUserMenuAnchor(null); setShowSiteSetup(true); }}>
+              <ListItemIcon><SettingsIcon fontSize="small" /></ListItemIcon>
+              <ListItemText primary="Site Setup" />
+            </MenuItem>
+          )}
           <MenuItem onClick={signOut}>
             <ListItemIcon><LogoutIcon fontSize="small" /></ListItemIcon>
             <ListItemText primary="Sign Out" />
@@ -2709,46 +2728,42 @@ function App() {
           <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', px: 4, py: 8 }}>
             {/* Hero Section */}
             <Box sx={{ textAlign: 'center', mb: 6, maxWidth: 800 }}>
-              <NewspaperIcon sx={{ fontSize: 80, color: 'primary.main', mb: 2 }} />
+              {(() => {
+                const splash = siteSettings.splashContent
+                if (splash.heroImageKey && imageUrls[splash.heroImageKey]) {
+                  return <Box component="img" src={imageUrls[splash.heroImageKey]} alt="Hero" sx={{ width: 80, height: 80, objectFit: 'contain', mb: 2 }} />
+                }
+                const HeroIcon = getIconComponent(splash.heroIcon || 'Newspaper')
+                return <HeroIcon sx={{ fontSize: 80, color: 'primary.main', mb: 2 }} />
+              })()}
               <Typography variant="h2" component="h1" gutterBottom sx={{ fontWeight: 700, mb: 2 }}>
-                Welcome to Classified Ad Builder
+                {siteSettings.splashContent.heroTitle}
               </Typography>
               <Typography variant="h6" color="text.secondary" sx={{ mb: 4 }}>
-                Create professional classified advertisements for your local newspaper with ease
+                {siteSettings.splashContent.heroSubtitle}
               </Typography>
             </Box>
 
             {/* Features Grid */}
             <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)' }, gap: 4, mb: 6, maxWidth: 1200, width: '100%' }}>
-              <Paper elevation={2} sx={{ p: 4, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <CreateIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
-                  Easy Creation
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Build your ad with our intuitive drag-and-drop editor. Add text, images, and format your content exactly as you want it.
-                </Typography>
-              </Paper>
-
-              <Paper elevation={2} sx={{ p: 4, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <ImageIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
-                  Rich Media
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Upload images to make your ad stand out. Support for multiple images with automatic sizing and positioning.
-                </Typography>
-              </Paper>
-
-              <Paper elevation={2} sx={{ p: 4, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <DescriptionIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
-                  Professional Output
-                </Typography>
-                <Typography variant="body2" color="text.secondary">
-                  Export your ad as a PDF ready for print. Preview exactly how it will look in the newspaper.
-                </Typography>
-              </Paper>
+              {siteSettings.splashContent.cards.map((card, idx) => {
+                const CardIcon = getIconComponent(card.icon || 'Create')
+                return (
+                  <Paper key={idx} elevation={2} sx={{ p: 4, textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    {card.imageKey && imageUrls[card.imageKey] ? (
+                      <Box component="img" src={imageUrls[card.imageKey]} alt={card.title} sx={{ width: 48, height: 48, objectFit: 'contain', mb: 2 }} />
+                    ) : (
+                      <CardIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
+                    )}
+                    <Typography variant="h6" gutterBottom sx={{ fontWeight: 600 }}>
+                      {card.title}
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      {card.text}
+                    </Typography>
+                  </Paper>
+                )
+              })}
             </Box>
 
             {/* Call to Action */}
@@ -2760,7 +2775,7 @@ function App() {
                 onClick={() => { setShowLandingPage(false); newAd(); }}
                 sx={{ px: 4, py: 1.5, fontSize: '1.1rem' }}
               >
-                Create Your First Ad
+                {siteSettings.splashContent.ctaText}
               </Button>
             </Box>
           </Box>
@@ -2818,9 +2833,9 @@ function App() {
             <ArrowBackIcon />
           </IconButton>
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            📰 Classified Ad Builder
+            {siteSettings.splashContent.siteName}
           </Typography>
-          
+
           <Tooltip title="New Ad">
             <IconButton color="inherit" onClick={newAd}>
               <NoteAddIcon />
@@ -3096,12 +3111,18 @@ function App() {
             <ListItemText primary="Admin Dashboard" />
           </MenuItem>
         )}
+        {isAdmin && (
+          <MenuItem onClick={() => { setUserMenuAnchor(null); setShowSiteSetup(true); }}>
+            <ListItemIcon><SettingsIcon fontSize="small" /></ListItemIcon>
+            <ListItemText primary="Site Setup" />
+          </MenuItem>
+        )}
         <MenuItem onClick={signOut}>
           <ListItemIcon><LogoutIcon fontSize="small" /></ListItemIcon>
           <ListItemText primary="Sign Out" />
         </MenuItem>
       </Menu>
-      
+
       {/* Contact Info Dialog */}
       <Dialog open={contactDialogOpen} onClose={() => setContactDialogOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Contact Information</DialogTitle>
